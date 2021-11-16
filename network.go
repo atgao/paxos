@@ -1,40 +1,59 @@
-package network 
+package paxos
 
-import "encoding/gob"
-import "bytes"
-import "reflect"
-import "sync"
-import "log"
-import "strings"
-import "math/rand"
-import "time"
+// import "encoding/gob"
+// import "bytes"
+// import "reflect"
+// import "sync"
+// import "log"
+// import "strings"
+// import "math/rand"
+// import "time"
+// import "fmt"
 
-type reqMsg struct {
-	endname  interface{} // name of sending ClientEnd
-	svcMeth  string      // e.g. "Raft.AppendEntries"
-	argsType reflect.Type
-	args     []byte
-	replyCh  chan replyMsg
-}
-
-type replyMsg struct {
-	ok    bool
-	reply []byte
-}
-
-type ClientEnd struct {
-	endname interface{} // this end-point's name
-	ch      chan reqMsg // copy of Network.endCh
-}
 
 type Network struct {
-	mu             sync.Mutex
-	reliable       bool
-	longDelays     bool                        // pause a long time on send on disabled connection
-	longReordering bool                        // sometimes delay replies a long time
-	ends           map[interface{}]*ClientEnd  // ends, by name
-	enabled        map[interface{}]bool        // by end name
-	servers        map[interface{}]*Server     // servers, by name
-	connections    map[interface{}]interface{} // endname -> servername
-	endCh          chan reqMsg
+	nodes 	  int // number of Paxos nodes
+	sendQueue map[int] chan Message
+	recvQueue chan Message
 }
+
+func (net *Network) recv() {
+	for {
+		// select {
+		msg := <- net.recvQueue
+		for i, sendQueue := range net.sendQueue {
+			
+			if i == msg.From {
+				continue
+			}
+			// fmt.Printf("sending to %v\n", i)
+			// go func(sendQueue chan Message, msg Message) {
+			// 	sendQueue <- msg
+			// }(sendQueue, msg)
+
+			// TODO: need to make sure this always sends...
+			sendQueue <- msg
+			
+		} 
+		// }
+	}
+
+}
+
+func MakeNetwork(nodes int) *Network {
+	net := &Network{}
+	net.nodes = nodes
+
+	net.sendQueue = make(map[int] chan Message, 0)
+	net.recvQueue = make(chan Message)
+
+	//TODO: fill out other fields here...
+	for i := 0; i < nodes; i++ {
+		net.sendQueue[i] = make(chan Message, 1) // arbitrary to avoid blocking
+	}
+
+	go net.recv()
+
+	return net
+}
+

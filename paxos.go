@@ -1,15 +1,16 @@
 package paxos 
 
-import network
+import "fmt" // for testing
 
 // 
 // struct for messages sent between nodes
 // 
 type Message struct {
-	type 			string // prepare, propose, accept, etc 
-	proposalId 		int    // id proposed
-	acceptId		int    // id accepted
-	val 			int    // value proposed or accepted or promised
+	Type 			string // prepare, propose, accept, etc 
+	ProposalId 		int    // id proposed
+	AcceptId		int    // id accepted
+	Val 			int    // value proposed or accepted or promised
+	From 			int    // index of the sending node
 }
 
 //
@@ -23,20 +24,22 @@ type LogEntry struct {
 //
 // Go object implementing single Paxos node 
 //
-type Paxos {
-	// add clients or?? 
-	peers 	[]*network.ClientEnd 
-	me 		int // id in the peers array
+type Paxos struct {
+	me 			int // id in the peers array
+	net 		*Network // network node belongs to
 
-	proposalId int // 
-	maxId 	   int // max id seen so far
+	// proposalId is also the highest one seen so far
+	proposalId 		 int  // NOTE THAT THIS SHOULD ALWAYS BE INCREASING
 	proposalAccepted bool // already accepted proposal ?? 
 
-	// TODO: create recv channel always reading from..
+	// channels to always read from 
+	ch 				chan Message // channel to communicate from node --> network
+	acceptor 		chan Message // channel to read from as acceptor 
+	learner  		chan Message // channel as learner
 
 
-	state 	string // leader or acceptor 
-	Log 	[]LogEntry // logs for paxos 
+	state 			string // leader (proposer) or acceptor
+	Log 			[]LogEntry // TODO: fix this... 
 }
 
 // function for learner
@@ -46,51 +49,22 @@ func (px *Paxos) runLearner() {
 
 // function for acceptor
 func (px *Paxos) runAcceptor(){
-	switch msg.type {
-
-	case msg.type == "propose":
-		// TODO: check if ID is largest so far 
-		// note that proposal was accepted
-		// save proposal number, save proposal data
-	
-		if msg.proposalId == px.proposalId {
-			accpetedMsg := Message {
-				type: "accepted", 
-				acceptId: msg.proposalId, 
-				val: msg.val, 
-			}
-		}
-
-		// TODO: Send accepted message out to proposer 
-		// and all learners
-
-	case msg.type == "prepare": 
-		if msg.proposalId > px.proposalId {
-			px.proposalId = msg.proposalId 
-
-			promiseMsg := Message {
-				type: "promise",
-			}
-
-			// TODO: configure to send promise back to sender
-		}
-
-
-	}
 
 }
 
 // functions for proposer/leader 
-// TODO: should only be called by leader??
-func (px *Paxos) Propose(proposalId int, val int){
+// TODO / NOTE: only call propose when starting election
+func (px *Paxos) Prepare() {
+	px.proposalId += 1
 	msg := Message {
-		type: 	"propose", 
-		proposalId: proposalId, 
-		val: val 
+		Type: "prepare", 
+		ProposalId: px.proposalId, 
+		From: px.me,
 	}
 
-}
+	px.net.recvQueue <- msg
 
+}
 
 //
 // kills this paxos node
@@ -102,28 +76,43 @@ func (px *Paxos) kill() {
 // 
 // make new paxos node
 // 
-func Make(peers []*network.ClientEnd, me int) *Paxos {
+func Make(me int, net *Network) *Paxos {
 	px := &Paxos{}
 	px.me = me 
-	px.peers = peers
+	px.net = net
+	px.ch = px.net.sendQueue[me] // SHOULD ALWAYS BE THIS INDEX... 
 
 	// init the paxos node 
 	px.state = "A" // for acceptor 
+	px.Log = make([]LogEntry, 0) // TODO: is this needed...
+	px.proposalId = -1 // this way when we start its 0
 
+
+	go px.run()
 
 	return px
 }
 
+// this go routine keeps on running in the background
+func (px *Paxos) run() {
 
-// TODO: will only be called on first node
+	// go px.runAcceptor()
+	for {
+		// select {
+		msg := <- px.ch
+			fmt.Printf("from %v to %v, %v\n", msg.From, px.me, msg)
+
+		// }
+	}
+
+}
+
+
+
+// TODO: function for later to restart election
+// for when the current leader dies
 func (px *Paxos) startElection() {
 
 }
 
 
-// this go routine keeps on running in the background
-func (px *Paxos) run() {
-
-	go px.runAcceptor()
-
-}
