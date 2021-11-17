@@ -53,7 +53,7 @@ func (px *Paxos) runAcceptor(){
 }
 
 // functions for proposer/leader 
-// TODO / NOTE: only call propose when starting election
+// TODO / NOTE: only call prepare when starting election
 func (px *Paxos) Prepare() {
 	px.proposalId += 1
 	msg := Message {
@@ -62,6 +62,7 @@ func (px *Paxos) Prepare() {
 		From: px.me,
 	}
 
+	// send to network so can send to others
 	px.net.recvQueue <- msg
 
 }
@@ -97,6 +98,10 @@ func Make(me int, net *Network) *Paxos {
 func (px *Paxos) run() {
 
 	// go px.runAcceptor()
+	// go px.runLearner()
+
+	// loop to listen to messages and 
+	// forward them along to proper channels
 	for {
 		// select {
 		msg := <- px.ch

@@ -19,7 +19,6 @@ type Network struct {
 
 func (net *Network) recv() {
 	for {
-		// select {
 		msg := <- net.recvQueue
 		for i, sendQueue := range net.sendQueue {
 			
@@ -35,7 +34,6 @@ func (net *Network) recv() {
 			sendQueue <- msg
 			
 		} 
-		// }
 	}
 
 }
