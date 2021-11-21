@@ -60,12 +60,13 @@ func (px *Paxos) runAcceptor(){
 		msg := <- px.acceptor
 
 		switch msg.Type {
-		case "prepare":
+		case "prepare": // phase 1
 			if msg.ProposalId > px.proposalId {
 				px.proposalId = msg.ProposalId // update proposal 
 
 				// TODO: update proposal accepted boolean?? 
 				// TODO: check if the fields are right too...
+				// TODO: may need to fix the accept id
 				promiseMessage := Message {
 					Type: "promise", 
 					ProposalId: msg.ProposalId, 
@@ -75,13 +76,21 @@ func (px *Paxos) runAcceptor(){
 
 				px.net.recvQueue <- promiseMessage
 			}
+		
+		case "accept": // phase 2
+			if msg.ProposalId >= px.proposalId {
+				px.proposalId = msg.ProposalId
+				px.acceptedVal = msg.Val 
 
+				acceptedMsg := Message{
+					type: "accepted", 
+					ProposalId: msg.ProposalId, 
+					AcceptId: msg.ProposalId, 
+					Val: msg.Val
+				}
 
-		// case "accept": 
-		// 	if msg.ProposalId >= px.ProposalId {
-		// 		// TODO: some stuff 
-		// 	}
-
+				px.net.recvQueue <- acceptedMsg
+			}
 
 		}
 	}
@@ -101,6 +110,21 @@ func (px *Paxos) Prepare() {
 	// send to network so can send to others
 	px.net.recvQueue <- msg
 
+}
+
+// TODO / NOTE: only the leader should be calling this
+func (px *Paxos) Propose(val int) {
+
+	// message type is accept bc we want the acceptors 
+	// to accept 
+	msg := Message {
+		Type: "accept", 
+		ProposalId: px.proposalId, 
+		From: px.me,
+		Val: val, 
+	}
+
+	px.net.recvQueue <- msg
 }
 
 func (px *Paxos) runProposer() {
