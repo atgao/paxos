@@ -12,6 +12,7 @@ func TestNewPaxosNode(t *testing.T) {
 }
 
 func TestPrepare(t *testing.T) {
+	fmt.Printf("Running Prepare test...\n")
 	n := 3
 	net := MakeNetwork(n)
 	var px []*Paxos
@@ -24,6 +25,19 @@ func TestPrepare(t *testing.T) {
 
 }
 
-// func TestProposer(t *testing.T) {
-	
-// }
+func TestProposer(t *testing.T) {
+	fmt.Printf("Running Propose test....\n")
+	n :=3 
+	net := MakeNetwork(n)
+	var px []*Paxos 
+
+	for i := 0; i < n; i++ {
+		px = append(px, Make(i, net))
+	}
+
+	// TODO: note that we're just manually setting
+	// node 0 to be leader for the test, should be changed later on
+
+	px[0].state = "L"
+	px[0].Propose(0)
+}

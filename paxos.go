@@ -72,6 +72,7 @@ func (px *Paxos) runAcceptor(){
 					ProposalId: msg.ProposalId, 
 					AcceptId: px.proposalId, 
 					Val: px.acceptedVal, 
+					From: px.me, 
 				}
 
 				px.net.recvQueue <- promiseMessage
@@ -83,10 +84,11 @@ func (px *Paxos) runAcceptor(){
 				px.acceptedVal = msg.Val 
 
 				acceptedMsg := Message{
-					type: "accepted", 
+					Type: "accepted", 
+					From: px.me, 
 					ProposalId: msg.ProposalId, 
 					AcceptId: msg.ProposalId, 
-					Val: msg.Val
+					Val: msg.Val,
 				}
 
 				px.net.recvQueue <- acceptedMsg
@@ -114,7 +116,11 @@ func (px *Paxos) Prepare() {
 
 // TODO / NOTE: only the leader should be calling this
 func (px *Paxos) Propose(val int) {
+	if px.state != "L" {
+		return 
+	}
 
+	px.proposalId += 1
 	// message type is accept bc we want the acceptors 
 	// to accept 
 	msg := Message {
