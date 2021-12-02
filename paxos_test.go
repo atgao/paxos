@@ -1,4 +1,4 @@
-package paxos 
+package paxos
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 func TestNewPaxosNode(t *testing.T) {
 	net := MakeNetwork(1)
-	px := Make(0, net)
+	px := Make(0, net, 1)
 	fmt.Printf("Paxos Node %v \n", px.me)
 }
 
@@ -18,21 +18,21 @@ func TestPrepare(t *testing.T) {
 	var px []*Paxos
 
 	for i := 0; i < n; i++ {
-		px = append(px, Make(i, net))
+		px = append(px, Make(i, net, n))
 	}
-	//Test Prepare 
+	//Test Prepare
 	px[0].Prepare()
 
 }
 
 func TestProposer(t *testing.T) {
 	fmt.Printf("Running Propose test....\n")
-	n :=3 
+	n := 3
 	net := MakeNetwork(n)
-	var px []*Paxos 
+	var px []*Paxos
 
 	for i := 0; i < n; i++ {
-		px = append(px, Make(i, net))
+		px = append(px, Make(i, net, n))
 	}
 
 	// TODO: note that we're just manually setting
@@ -40,10 +40,29 @@ func TestProposer(t *testing.T) {
 
 	px[0].state = "L"
 
-	//leave it outside for now | for testing 
+	//leave it outside for now | for testing
+	px[0].Prepare()
 	px[0].Propose("cat")
+	px[0].Propose("dog")
 
-	//check the learner value 
 }
 
+func TestLearner(t *testing.T) {
+	fmt.Printf("Running Learner test....\n")
+	n := 3
+	net := MakeNetwork(n)
+	var px []*Paxos
 
+	for i := 0; i < n; i++ {
+		px = append(px, Make(i, net, n))
+	}
+
+	// TODO: note that we're just manually setting
+	// node 0 to be leader for the test, should be changed later on
+
+	px[0].state = "L"
+
+	//leave it outside for now | for testing
+	px[0].Prepare()
+	px[0].Propose("cat")
+}
