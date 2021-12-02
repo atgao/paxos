@@ -14,6 +14,7 @@ package paxos
 type Network struct {
 	nodes 	  int // number of Paxos nodes
 	sendQueue map[int] chan Message
+
 	recvQueue chan Message
 }
 
@@ -22,9 +23,9 @@ func (net *Network) recv() {
 		msg := <- net.recvQueue
 		for i, sendQueue := range net.sendQueue {
 			
-			if i == msg.From {
-				continue
-			}
+			// if i == msg.From {
+			// 	continue
+			// }
 			// fmt.Printf("sending to %v\n", i)
 			// go func(sendQueue chan Message, msg Message) {
 			// 	sendQueue <- msg

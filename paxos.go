@@ -1,6 +1,8 @@
 package paxos 
 
-import "fmt" // for testing
+import (
+	"fmt"
+	) // for testing
 
 // 
 // struct for messages sent between nodes
@@ -9,8 +11,9 @@ type Message struct {
 	Type 			string // prepare, propose, accept, etc 
 	ProposalId 		int    // id proposed
 	AcceptId		int    // id accepted
-	Val 			int    // value proposed or accepted or promised
+	Val 			string    // value proposed or accepted or promised 
 	From 			int    // index of the sending node
+	To				int 	// index of the receiving node
 }
 
 //
@@ -31,15 +34,10 @@ type Paxos struct {
 	// proposalId is also the highest one seen so far
 	proposalId 		 int  // NOTE THAT THIS SHOULD ALWAYS BE INCREASING
 	proposalAccepted bool // already accepted proposal ?? 
-	acceptedVal 	 int  // ?? 
+	acceptedVal 	 string  // I think this
 
 	// channels to always read from 
 	ch 				chan Message // channel to communicate from node --> network ????
-	acceptor 		chan Message // channel to read from as acceptor 
-	learner  		chan Message // channel as learner
-	proposer 		chan Message // channel as proposer/leader
-
-
 	state 			string // leader (proposer) or acceptor
 	Log 			[]LogEntry // TODO: fix this... 
 }
@@ -50,72 +48,74 @@ func quorum(n int) int{
 
 // function for learner
 func (px *Paxos) runLearner() {
-
 }
 
 // function for acceptor
-func (px *Paxos) runAcceptor(){
+func (px *Paxos) runAcceptor(msg Message){
 	
-	for {
-		msg := <- px.acceptor
-
 		switch msg.Type {
-		case "prepare": // phase 1
-			if msg.ProposalId > px.proposalId {
-				px.proposalId = msg.ProposalId // update proposal 
+			case "prepare": // phase 1
+				if msg.ProposalId > px.proposalId {
+					px.proposalId = msg.ProposalId // update proposal 
 
-				// TODO: update proposal accepted boolean?? 
-				// TODO: check if the fields are right too...
-				// TODO: may need to fix the accept id
-				promiseMessage := Message {
-					Type: "promise", 
-					ProposalId: msg.ProposalId, 
-					AcceptId: px.proposalId, 
-					Val: px.acceptedVal, 
-					From: px.me, 
+					// TODO: update proposal accepted boolean?? 
+					// TODO: check if the fields are right too...
+					// TODO: may need to fix the accept id
+
+					promiseMessage := Message {
+						Type: "promise", 
+						ProposalId: msg.ProposalId, 
+						AcceptId: px.proposalId, 
+						Val: px.acceptedVal, 
+						From: px.me, 
+						To: 
+					}
+					px.net.recvQueue <- promiseMessage
 				}
+			case "accept": // phase 2
+				if msg.ProposalId >= px.proposalId {
+					px.proposalId = msg.ProposalId
+					px.acceptedVal = msg.Val 
 
-				px.net.recvQueue <- promiseMessage
-			}
-		
-		case "accept": // phase 2
-			if msg.ProposalId >= px.proposalId {
-				px.proposalId = msg.ProposalId
-				px.acceptedVal = msg.Val 
-
-				acceptedMsg := Message{
-					Type: "accepted", 
-					From: px.me, 
-					ProposalId: msg.ProposalId, 
-					AcceptId: msg.ProposalId, 
-					Val: msg.Val,
+					acceptedMsg := Message{
+						Type: "accepted", 
+						From: px.me, 
+						ProposalId: msg.ProposalId, 
+						AcceptId: msg.ProposalId, 
+						Val: msg.Val,
+						To:
+					}
+					px.net.recvQueue <- acceptedMsg
 				}
-
-				px.net.recvQueue <- acceptedMsg
-			}
 
 		}
-	}
+
 
 }
 
 // functions for proposer/leader 
 // TODO / NOTE: only call prepare when starting election
 func (px *Paxos) Prepare() {
-	px.proposalId += 1
-	msg := Message {
-		Type: "prepare", 
-		ProposalId: px.proposalId, 
-		From: px.me,
-	}
 
+	//creating an array of messages, each message have different To target
+
+	//right now we just send the message to every acceptor (which is every Px Node) 
+	for acepId, _ := range px {
+		px.proposalId += 1
+		msg := Message {
+			Type: "prepare", 
+			ProposalId: px.proposalId, 
+			From: px.me,
+			To: 
+		}
 	// send to network so can send to others
-	px.net.recvQueue <- msg
 
+
+	px.net.recvQueue <- msg
 }
 
 // TODO / NOTE: only the leader should be calling this
-func (px *Paxos) Propose(val int) {
+func (px *Paxos) Propose(val string) {
 	if px.state != "L" {
 		return 
 	}
@@ -133,28 +133,7 @@ func (px *Paxos) Propose(val int) {
 	px.net.recvQueue <- msg
 }
 
-func (px *Paxos) runProposer() {
-	// var npromised, q int = 0, quorum(px.net.nodes)
-	// for {
-	// 	msg := <- px.proposer 
-	// 	switch msg.Type {
-	// 	// case "propose": 
-	// 	// 	proposeMsg := {
 
-	// 	// 	}
-	// 	case "promise":
-	// 		if msg.ProposalId > px.proposalId
-
-
-	// 	}
-	// }
-
-}
-
-
-// TODO: need to figure this out...
-// kills this paxos node
-//
 func (px *Paxos) kill() {
 	// TODO:
 }
@@ -173,54 +152,47 @@ func Make(me int, net *Network) *Paxos {
 	px.Log = make([]LogEntry, 0) // TODO: is this needed...
 	px.proposalId = -1 // this way when we start its 0
 	px.proposalAccepted = false 
-	px.acceptedVal = -1 
-	px.acceptor = make(chan Message)
-	px.learner = make(chan Message)
-	px.proposer = make(chan Message)
-
+	px.acceptedVal = "Test"
 
 	go px.run()
-
 	return px
 }
 
 // this go routine keeps on running in the background
 func (px *Paxos) run() {
 
-	go px.runProposer()
-	go px.runAcceptor()
-	// go px.runLearner()
-
 	// loop to listen to messages and 
 	// forward them along to proper channels
 	for {
-		// select {
 		msg := <- px.ch
 			fmt.Printf("from %v to %v, %v\n", msg.From, px.me, msg)
 
-		// }
-
 		switch msg.Type {
 		case "prepare": // proposer --> acceptor 
-			px.acceptor <- msg 
+
+			fmt.Println("Proposer start run... val:", msg.ProposalId)
+			//Proposor send prepare message to acceptor to reach majority consensus.
+			
+			//need a condition to check if majority reached
+
+
+
+			
 		case "accept": // proposer --> acceptor 
-			px.acceptor <- msg 
+			px.runAcceptor(msg)
 		
 		// // do some stuff here for proposer
 		case "promise": 
-			px.proposer <- msg
+
 		// case "propose": I DONT THINK THIS ACTUALLY GOES HERE
 		// 	px.proposer <- msg 
 
 		case "accepted":
-			px.learner <- msg			
 		}
 		
 	}
 
 }
-
-
 
 // TODO: function for later to restart election
 // for when the current leader dies

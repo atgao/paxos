@@ -20,7 +20,7 @@ func TestPrepare(t *testing.T) {
 	for i := 0; i < n; i++ {
 		px = append(px, Make(i, net))
 	}
-
+	//Test Prepare 
 	px[0].Prepare()
 
 }
@@ -39,5 +39,11 @@ func TestProposer(t *testing.T) {
 	// node 0 to be leader for the test, should be changed later on
 
 	px[0].state = "L"
-	px[0].Propose(0)
+
+	//leave it outside for now | for testing 
+	px[0].Propose("cat")
+
+	//check the learner value 
 }
+
+
