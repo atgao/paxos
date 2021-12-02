@@ -35,8 +35,9 @@ type Paxos struct {
 	proposalId       int  // NOTE THAT THIS SHOULD ALWAYS BE INCREASING
 	proposalAccepted bool // already accepted proposal ??
 	acceptedVal      string
-	peers            []string //right now I use this to count the number of Px Nodes
+	acceptedMessages map[int]Message
 
+	peers []string //right now I use this to count the number of Px Nodes
 	// channels to always read from
 	ch    chan Message // channel to communicate from node --> network ????
 	state string       // leader (proposer) or acceptor
@@ -48,8 +49,48 @@ func (px *Paxos) quorum() int {
 	return len(px.peers)/2 + 1
 }
 
+//function for clean the accepted value
+func (px *Paxos) clean() {
+	px.acceptedVal = ""
+}
+
 // function for learner
-func (px *Paxos) runLearner() {
+func (px *Paxos) runLearner(msg Message) string {
+
+	for {
+		if msg.Val == "" {
+			continue
+		}
+		if msg.ProposalId > px.proposalId {
+			px.proposalId = msg.ProposalId
+		}
+		learnMsg, islearn := px.choseMajority()
+		if islearn == false {
+			continue
+		}
+		px.acceptedVal = learnMsg.Val
+		return learnMsg.Val
+	}
+}
+
+func (px *Paxos) choseMajority() (Message, bool) {
+	//need to loop through all accepted message
+	CountResult := make(map[int]int)
+	MessageResult := make(map[int]Message)
+
+	for _, Msg := range px.acceptedMessages {
+		ProposalID := Msg.ProposalId
+		CountResult[ProposalID] += 1
+		MessageResult[ProposalID] = Msg
+	}
+
+	for ChosenID, ChosenMsg := range MessageResult {
+		fmt.Printf("Proposal[%v] Message[%s]\n", ChosenID, ChosenMsg.Val)
+		if CountResult[ChosenID] > px.quorum() {
+			return ChosenMsg, true
+		}
+	}
+	return Message{}, false
 }
 
 // function for acceptorgo bui
@@ -159,8 +200,15 @@ func Make(me int, net *Network, peer int) *Paxos {
 	px.Log = make([]LogEntry, 0) // TODO: is this needed...
 	px.proposalId = -1           // this way when we start its 0
 	px.proposalAccepted = false
-	px.acceptedVal = "Test"
+	px.acceptedVal = ""
 	px.peers = make([]string, peer)
+	px.acceptedMessages = make(map[int]Message)
+
+	//keep track of the acceptedMessage, so we can determin if we've reach the majority consensus [distributed log?]
+	for i := 0; i < peer; i++ {
+		px.acceptedMessages[i] = Message{}
+	}
+
 	go px.run()
 	return px
 }
@@ -185,11 +233,10 @@ func (px *Paxos) run() {
 
 		// // do some stuff here for proposer
 		case "promise":
-
-		// case "propose": I DONT THINK THIS ACTUALLY GOES HERE
 		// 	px.proposer <- msg
 
 		case "accepted":
+			px.runLearner(msg)
 		}
 
 	}

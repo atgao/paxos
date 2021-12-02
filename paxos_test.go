@@ -3,6 +3,7 @@ package paxos
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestNewPaxosNode(t *testing.T) {
@@ -43,7 +44,6 @@ func TestProposer(t *testing.T) {
 	//leave it outside for now | for testing
 	px[0].Prepare()
 	px[0].Propose("cat")
-	px[0].Propose("dog")
 
 }
 
@@ -65,4 +65,10 @@ func TestLearner(t *testing.T) {
 	//leave it outside for now | for testing
 	px[0].Prepare()
 	px[0].Propose("cat")
+	time.Sleep(1 * time.Second)
+
+	if px[0].acceptedVal != "cat" {
+		t.Errorf("Learner learn wrong proposal.")
+
+	}
 }
