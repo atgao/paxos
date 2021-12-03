@@ -41,6 +41,15 @@ func broadcast(conn *net.UDPConn, addresses []string, buffer bytes.Buffer) {
 	}
 }
 
+func sendGenericMessage(conn *net.UDPConn, address string, msg GenericMessage) error {
+	var buffer bytes.Buffer
+	enc := gob.NewEncoder(&buffer)
+	if err := enc.Encode(msg); err != nil {
+		log.Fatal("Failed to encode messsage: " + err.Error())
+	}
+	return sendOne(conn, address, buffer)
+}
+
 func broadcastGenericMsg(conn *net.UDPConn, addresses []string, msg GenericMessage) {
 	var buffer bytes.Buffer
 	enc := gob.NewEncoder(&buffer)
