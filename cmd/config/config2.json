@@ -1,0 +1,8 @@
+{
+  "id": 2,
+  "address": "localhost:1026",
+  "peers": [{
+    "id": 1,
+    "address": "localhost:1025"
+  }]
+}
