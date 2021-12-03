@@ -49,7 +49,8 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 		return nil, err
 	}
 
-	ch, err := MkUDPMessageQueue(pc)
+	ch := make(chan GenericMessage)
+	UDPServeGenericMessage(pc, ch)
 	if err != nil {
 		log.Fatal("Failed to listen on UDP")
 	}

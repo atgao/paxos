@@ -70,8 +70,7 @@ func BroadcastKeepAliveMessage(conn *net.UDPConn, addresses []string, msg KeepAl
 	broadcastGenericMsg(conn, addresses, GenericMessage{nil, &msg, nil})
 }
 
-func MkUDPMessageQueue(conn *net.UDPConn) (chan GenericMessage, error) {
-	ret := make(chan GenericMessage)
+func UDPServeGenericMessage(conn *net.UDPConn, ch chan GenericMessage) {
 	buf := make([]byte, 1024)
 	go func() {
 		for {
@@ -88,8 +87,7 @@ func MkUDPMessageQueue(conn *net.UDPConn) (chan GenericMessage, error) {
 			if err != nil {
 				log.Warn(fmt.Sprintf("Error decoding message: " + err.Error()))
 			}
-			ret <- msg
+			ch <- msg
 		}
 	}()
-	return ret, nil
 }
