@@ -11,6 +11,7 @@ import (
 type GenericMessage struct {
 	Paxos     *Message
 	KeepAlive *KeepAliveMessage
+	LockRelay *LockRelayMessage
 }
 
 func sendOne(conn *net.UDPConn, address string, buffer bytes.Buffer) error {
@@ -61,12 +62,12 @@ func broadcastGenericMsg(conn *net.UDPConn, addresses []string, msg GenericMessa
 
 func BroadcastPaxosMessage(conn *net.UDPConn, addresses []string, msg Message) {
 	log.Info("Broadcasting paxos message")
-	broadcastGenericMsg(conn, addresses, GenericMessage{&msg, nil})
+	broadcastGenericMsg(conn, addresses, GenericMessage{&msg, nil, nil})
 }
 
 func BroadcastKeepAliveMessage(conn *net.UDPConn, addresses []string, msg KeepAliveMessage) {
 	log.Info("Broadcasting keep alive message")
-	broadcastGenericMsg(conn, addresses, GenericMessage{nil, &msg})
+	broadcastGenericMsg(conn, addresses, GenericMessage{nil, &msg, nil})
 }
 
 func MkUDPMessageQueue(conn *net.UDPConn) (chan GenericMessage, error) {
