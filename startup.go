@@ -9,19 +9,21 @@ import (
 type GlobalState struct {
 	Config                *Config
 	HeartBeatState        *HeartBeatState
-	sock                  *net.UDPConn
+	InterNodeUDPSock      *net.UDPConn
+	ClientFacingUDPSock   *net.UDPConn
 	MessageQueue          chan GenericMessage
 	PaxosMessageQueue     chan Message
 	KeepAliveMessageQueue chan KeepAliveMessage
+	LockRelayMessageQueue chan LockRelayMessage
 }
 
 func sendInitialHeartBeat(state *GlobalState) {
-	BroadcastKeepAliveMessage(state.sock, state.Config.AllPeerAddresses(),
+	BroadcastKeepAliveMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(),
 		KeepAliveMessage{state.Config.SelfId})
 }
 
 func MessageRouter(messageQueue chan GenericMessage, paxosMessageQueue chan Message,
-	keepAliveMessageQueue chan KeepAliveMessage) {
+	keepAliveMessageQueue chan KeepAliveMessage, lockRelayMessageQueue chan LockRelayMessage) {
 	for {
 		select {
 		case genericMessage := <-messageQueue:
@@ -31,6 +33,9 @@ func MessageRouter(messageQueue chan GenericMessage, paxosMessageQueue chan Mess
 			} else if genericMessage.KeepAlive != nil {
 				log.Info(fmt.Sprintf("Received keep alive message: %v", *genericMessage.KeepAlive))
 				keepAliveMessageQueue <- *genericMessage.KeepAlive
+			} else if genericMessage.LockRelay != nil {
+				log.Info(fmt.Sprintf("Received lock message: %v", *genericMessage.LockRelay))
+				lockRelayMessageQueue <- *genericMessage.LockRelay
 			} else {
 				log.Warn("Unrecognized message")
 			}
@@ -40,7 +45,7 @@ func MessageRouter(messageQueue chan GenericMessage, paxosMessageQueue chan Mess
 
 func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	config := ConfigFromJSON(configData)
-	raddr, err := net.ResolveUDPAddr("udp", config.SelfAddress)
+	raddr, err := net.ResolveUDPAddr("udp", config.PaxosAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -48,16 +53,28 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Info(fmt.Sprintf("Started paxos server on %s", config.PaxosAddr))
+
+	raddr, err = net.ResolveUDPAddr("udp", config.ServerAddr)
+	if err != nil {
+		return nil, err
+	}
+	pcserv, err := net.ListenUDP("udp", raddr)
+	if err != nil {
+		return nil, err
+	}
+	log.Info(fmt.Sprintf("Started lock server on %s", config.ServerAddr))
 
 	ch := make(chan GenericMessage)
 	UDPServeGenericMessage(pc, ch)
+	UDPServeLockMessage(config.SelfId, pcserv, ch)
 	if err != nil {
 		log.Fatal("Failed to listen on UDP")
 	}
-	state := &GlobalState{config, InitHeartBeatState(config), pc, ch,
-		make(chan Message), make(chan KeepAliveMessage)}
+	state := &GlobalState{config, InitHeartBeatState(config), pc, pcserv, ch,
+		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage)}
 	sendInitialHeartBeat(state)
-	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue)
-	go KeepAliveWorker(state.sock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
+	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
+	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
 	return state, nil
 }

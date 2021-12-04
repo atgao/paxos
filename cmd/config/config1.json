@@ -1,8 +1,11 @@
 {
   "id": 1,
-  "address": "localhost:1025",
+  "address": {
+    "paxos": "localhost:1025",
+    "server": "localhost:1026"
+  },
   "peers": [{
     "id": 2,
-    "address": "localhost:1026"
+    "address": "localhost:1027"
   }]
 }
