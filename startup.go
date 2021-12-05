@@ -15,6 +15,7 @@ type GlobalState struct {
 	PaxosMessageQueue     chan Message
 	KeepAliveMessageQueue chan KeepAliveMessage
 	LockRelayMessageQueue chan LockRelayMessage
+	LockState             *LockState
 }
 
 func sendInitialHeartBeat(state *GlobalState) {
@@ -72,7 +73,7 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 		log.Fatal("Failed to listen on UDP")
 	}
 	state := &GlobalState{config, InitHeartBeatState(config), pc, pcserv, ch,
-		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage)}
+		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage), &LockState{}}
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)

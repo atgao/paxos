@@ -14,24 +14,20 @@ type GenericMessage struct {
 	LockRelay *LockRelayMessage
 }
 
+func sendOneAddr(conn *net.UDPConn, address *net.UDPAddr, buffer bytes.Buffer) error {
+	_, err := conn.WriteTo(buffer.Bytes(), address)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func sendOne(conn *net.UDPConn, address string, buffer bytes.Buffer) error {
 	raddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		return err
 	}
-	/*
-		conn, err := net.DialUDP("udp", nil, raddr)
-		if err != nil {
-			return err
-		}
-		defer conn.Close()
-	*/
-
-	_, err = conn.WriteTo(buffer.Bytes(), raddr)
-	if err != nil {
-		return err
-	}
-	return nil
+	return sendOneAddr(conn, raddr, buffer)
 }
 
 func broadcast(conn *net.UDPConn, addresses []string, buffer bytes.Buffer) {
