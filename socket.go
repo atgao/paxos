@@ -66,6 +66,11 @@ func BroadcastKeepAliveMessage(conn *net.UDPConn, addresses []string, msg KeepAl
 	broadcastGenericMsg(conn, addresses, GenericMessage{nil, &msg, nil})
 }
 
+func SendLockRelayMessage(conn *net.UDPConn, address string, msg LockRelayMessage) {
+	log.Info("Sending lock relay message")
+	sendGenericMessage(conn, address, GenericMessage{LockRelay: &msg})
+}
+
 func UDPServeGenericMessage(conn *net.UDPConn, ch chan GenericMessage) {
 	buf := make([]byte, 1024)
 	go func() {

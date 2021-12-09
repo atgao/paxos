@@ -44,6 +44,19 @@ func MessageRouter(messageQueue chan GenericMessage, paxosMessageQueue chan Mess
 	}
 }
 
+func LockRelay(state *GlobalState) {
+	for {
+		select {
+		case msg := <-state.LockRelayMessageQueue:
+			if state.Config.SelfId == state.HeartBeatState.CurrentLeaderId(state.Config) {
+				log.Warn("Should process lock relay message here")
+			} else {
+				SendLockRelayMessage(state.InterNodeUDPSock, state.HeartBeatState.CurrentLeaderAddress(state.Config), msg)
+			}
+		}
+	}
+}
+
 func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	config := ConfigFromJSON(configData)
 	raddr, err := net.ResolveUDPAddr("udp", config.PaxosAddr)
@@ -77,5 +90,6 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
+	go LockRelay(state)
 	return state, nil
 }
