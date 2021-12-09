@@ -30,7 +30,7 @@ type Paxos struct {
 	role string // leader (proposer) or acceptor
 }
 
-func Make(me int) *Paxos {
+func Make(me int, state *GlobalState) *Paxos {
 	px := &Paxos{}     // init the paxos node
 	px.me = me         // my index in the sendQueue array
 	px.role = "A"      // for acceptor ??? may need to fix...
@@ -38,13 +38,12 @@ func Make(me int) *Paxos {
 	px.proposalAccepted = false
 	px.acceptedVal = nil
 	px.acceptedMessages = make(map[int]Message)
-
-	go px.run()
+	go px.run(state)
 	return px
 }
 
 // this go routine keeps on running in the background
-func (px *Paxos) run() {
+func (px *Paxos) run(state *GlobalState) {
 	// If no consensus were reached
 	for {
 		NewPaxosMessage := <-state.PaxosMessageQueue
@@ -69,7 +68,7 @@ func (px *Paxos) run() {
 
 	// }
 }
-func (px *Paxos) Prepare() {
+func (px *Paxos) Prepare() Message {
 
 	//creating an array of messages, each message have different To target
 	//right now we just send the message to every acceptor (m=3))
@@ -79,7 +78,7 @@ func (px *Paxos) Prepare() {
 		Type:       "prepare",
 		ProposalId: px.proposalId,
 	}
-	state.PaxosMessageQueue <- msg
+	return msg
 	// send to network so can send to others
 }
 
@@ -192,7 +191,7 @@ func (px *Paxos) Prepare() {
 // }
 
 // function for majority threshold
-func quorum() int {
+func quorum(state *GlobalState) int {
 	return len(state.HeartBeatState.AllAlivePeerAddresses(state.Config))/2 + 1
 }
 

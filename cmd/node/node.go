@@ -7,7 +7,7 @@ import (
 	"github.com/atgao/paxos"
 )
 
-var state *paxos.GlobalState
+// var state *paxos.GlobalState
 
 func main() {
 	configPath := flag.String("config", "", "Config file path")
@@ -21,7 +21,11 @@ func main() {
 		panic("Failed to read config file: " + err.Error())
 	}
 
-	paxos.GlobalInitialize([]byte(config))
+	state, err := paxos.GlobalInitialize([]byte(config))
 
-	select {}
+	px1 := paxos.Make(1, state)
+	// px2 := paxos.Make(2,state)
+	prepareMessage := px1.Prepare()
+	paxos.BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), prepareMessage)
+
 }
