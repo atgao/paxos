@@ -5,9 +5,11 @@ import (
 	"encoding/gob"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"sync"
 )
 
 type LockState struct {
+	mu         sync.Mutex
 	lockholder *net.UDPAddr
 }
 
@@ -15,31 +17,34 @@ func UDPAddrEq(addr1 net.UDPAddr, addr2 net.UDPAddr) bool {
 	return addr1.String() == addr2.String()
 }
 
-func (lockState LockState) transition(msg LockRelayMessage) (bool, LockState) {
+func (lockState *LockState) transition(msg LockRelayMessage) bool {
+	lockState.mu.Lock()
+	defer lockState.mu.Unlock()
 	if msg.Lock == true {
 		if lockState.lockholder == nil {
-			return true, LockState{msg.ClientAddr}
+			lockState.lockholder = msg.ClientAddr
+			return true
 		} else {
-			return false, lockState
+			return false
 		}
 	} else {
 		if lockState.lockholder == nil {
-			return false, lockState
+			return false
 		} else if UDPAddrEq(*lockState.lockholder, *msg.ClientAddr) {
-			return true, LockState{nil}
+			lockState.lockholder = nil
+			return true
 		} else {
-			return false, lockState
+			return false
 		}
 	}
 }
 
-func (lockState LockState) transitionLog(log []LockRelayMessage) ([]bool, LockState) {
+func (lockState *LockState) transitionLog(log []LockRelayMessage) []bool {
 	ret := make([]bool, len(log))
-	currentLockState := lockState
 	for i, v := range log {
-		ret[i], currentLockState = currentLockState.transition(v)
+		ret[i] = lockState.transition(v)
 	}
-	return ret, currentLockState
+	return ret
 }
 
 func ResponseLockRelayMessages(servConn *net.UDPConn, selfId int, lockLog []LockRelayMessage, lockRes []bool) {
@@ -61,7 +66,6 @@ func ResponseLockRelayMessages(servConn *net.UDPConn, selfId int, lockLog []Lock
 }
 
 func CommitLog(lockState *LockState, servConn *net.UDPConn, selfId int, lockLog []LockRelayMessage) {
-	lockRes, newLog := lockState.transitionLog(lockLog)
+	lockRes := lockState.transitionLog(lockLog)
 	ResponseLockRelayMessages(servConn, selfId, lockLog, lockRes)
-	*lockState = newLog
 }

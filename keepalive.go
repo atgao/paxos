@@ -63,10 +63,14 @@ func KeepAliveWorker(conn *net.UDPConn, config *Config, state *HeartBeatState, c
 }
 
 func (state *HeartBeatState) setPeerAliveStatus(id int, isAlive bool) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	state.alivePeers[id] = isAlive
 }
 
 func (state *HeartBeatState) AlivePeers() []int {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	m := make([]int, 0, len(state.alivePeers))
 	for i, isAlive := range state.alivePeers {
 		if isAlive {
@@ -77,6 +81,8 @@ func (state *HeartBeatState) AlivePeers() []int {
 }
 
 func (state *HeartBeatState) AllAlivePeerAddresses(config *Config) []string {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	alive := state.AlivePeers()
 	addresses := make([]string, len(alive))
 	idx := 0
