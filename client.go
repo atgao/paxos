@@ -10,33 +10,35 @@ import (
 
 const LockWaitDuration = 10 * time.Second
 
-func RequestLockServer(server string, lock bool) bool {
+func RequestLockServer(clientSock *net.UDPConn, server string, lock bool) bool {
 	addr, err := net.ResolveUDPAddr("udp", server)
 	if err != nil {
 		return false
 	}
-	conn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		return false
-	}
-	defer func() {
-		err = conn.Close()
+	/*
+		conn, err := net.DialUDP("udp", nil, addr)
 		if err != nil {
-			return
+			return false
 		}
-	}()
+		defer func() {
+			err = conn.Close()
+			if err != nil {
+				return
+			}
+		}()
+	*/
 	var buffer bytes.Buffer
 	enc := gob.NewEncoder(&buffer)
 	if err := enc.Encode(LockMessage{lock}); err != nil {
 		log.Fatal("Failed to encode lock message")
 	}
-	if _, err := conn.Write(buffer.Bytes()); err != nil {
+	if _, err := clientSock.WriteTo(buffer.Bytes(), addr); err != nil {
 		log.Fatal("Failed to send lock message")
 	}
 
 	ch := make(chan bool)
 	go func() {
-		_, err := conn.Read(buffer.Bytes())
+		_, err := clientSock.Read(buffer.Bytes())
 		if err != nil {
 			log.Warn("Failed to read server response: " + err.Error())
 			return

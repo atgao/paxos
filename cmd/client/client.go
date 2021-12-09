@@ -3,7 +3,10 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
+	log "github.com/sirupsen/logrus"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -11,7 +14,7 @@ import (
 import "github.com/atgao/paxos"
 
 type command interface {
-	execute()
+	execute(clientSock *net.UDPConn)
 }
 
 type SleepCommand struct {
@@ -26,16 +29,16 @@ type UnlockCommand struct {
 	server string
 }
 
-func (comm SleepCommand) execute() {
+func (comm SleepCommand) execute(clientSock *net.UDPConn) {
 	time.Sleep(comm.time)
 }
 
-func (comm LockCommand) execute() {
-	paxos.RequestLockServer(comm.server, true)
+func (comm LockCommand) execute(clientSock *net.UDPConn) {
+	paxos.RequestLockServer(clientSock, comm.server, true)
 }
 
-func (comm UnlockCommand) execute() {
-	paxos.RequestLockServer(comm.server, false)
+func (comm UnlockCommand) execute(clientSock *net.UDPConn) {
+	paxos.RequestLockServer(clientSock, comm.server, false)
 }
 
 func parser(line string) (command, error) {
@@ -66,13 +69,29 @@ func parser(line string) (command, error) {
 }
 
 func main() {
+	clientAddr := flag.String("address", "", "Client address")
+	flag.Parse()
+	if *clientAddr == "" {
+		panic("No client address specified")
+	}
+
+	addr, err := net.ResolveUDPAddr("udp", *clientAddr)
+	if err != nil {
+		panic("Failed to resolve client address: " + err.Error())
+	}
+	clientSock, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		panic("Failed to open client socket: " + err.Error())
+	}
+	log.Info(fmt.Sprintf("Started client on %s", *clientAddr))
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		comm, err := parser(scanner.Text())
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			comm.execute()
+			comm.execute(clientSock)
 		}
 	}
 }
