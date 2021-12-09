@@ -4,8 +4,14 @@
     "paxos": "localhost:1027",
     "server": "localhost:1028"
   },
-  "peers": [{
-    "id": 1,
-    "address": "localhost:1025"
-  }]
+  "peers": [
+    {
+      "id": 1,
+      "address": "localhost:1025"
+    },
+    {
+      "id": 3,
+      "address": "localhost:1029"
+    }
+  ]
 }
