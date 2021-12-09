@@ -2,8 +2,9 @@ package main
 
 import (
 	"flag"
-	"github.com/atgao/paxos"
 	"io/ioutil"
+
+	"github.com/atgao/paxos"
 )
 
 var state *paxos.GlobalState
