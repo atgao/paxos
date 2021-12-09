@@ -55,8 +55,9 @@ func KeepAliveWorker(conn *net.UDPConn, config *Config, state *HeartBeatState, c
 			}
 		case m := <-ch:
 			state.lastAliveTime[m.Id] = time.Now()
-			log.Info(fmt.Sprintf("Received heartbeat from peer %d", m))
 			state.setPeerAliveStatus(m.Id, true)
+			log.Info(fmt.Sprintf("Received heartbeat from peer %d, current alive peers %v, current leader %d", m,
+				state.AlivePeers(), state.CurrentLeaderId(config)))
 		}
 	}
 }
@@ -88,10 +89,14 @@ func (state *HeartBeatState) AllAlivePeerAddresses(config *Config) []string {
 
 func (state *HeartBeatState) CurrentLeaderId(config *Config) int {
 	leader := config.SelfId
-	for i := range state.AlivePeers() {
+	for _, i := range state.AlivePeers() {
 		if i > leader {
 			leader = i
 		}
 	}
 	return leader
+}
+
+func (state *HeartBeatState) CurrentLeaderAddress(config *Config) string {
+	return config.PeerAddress[state.CurrentLeaderId(config)]
 }
