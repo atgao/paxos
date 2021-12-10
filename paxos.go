@@ -12,11 +12,11 @@ import (
 
 type Message struct {
 	ProposalId         int    // id proposed
-	currentVal         int    // value for currrent round of proposal
+	CurrentVal         int    // value for currrent round of proposal
 	AcceptId           int    // id accepted
-	highestAcceptedVal string // value from the highest proposer ID acceptor
+	HighestAcceptedVal string // value from the highest proposer ID acceptor
 	Type               string // prepare, propose, accept, accepted etc
-	decidedVal         string // value from the consensus
+	DecidedVal         string // value from the consensus
 }
 
 // Go object implementing single Paxos node
@@ -56,13 +56,13 @@ func (px *Paxos) run(state *GlobalState) {
 			log.Info(fmt.Sprintf("Proposer start run... val:", NewPaxosMessage.ProposalId))
 			px.runAcceptor(NewPaxosMessage)
 
-			// BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), NewPaxosMessage)
 			//Proposor send prepare message to acceptor to reach majority consensus.
 		case "promise":
 			px.runPromisor(NewPaxosMessage)
-			// BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), NewPaxosMessage)
 
 		case "accept": // proposer --> acceptor
+			log.Info(fmt.Sprintf("acceptor start run... val:", NewPaxosMessage.CurrentVal))
+
 			px.runAcceptor(NewPaxosMessage)
 
 		case "accepted":
@@ -93,7 +93,7 @@ func (px *Paxos) Prepare(state *GlobalState) {
 	msg := Message{
 		Type:       "prepare",
 		ProposalId: px.minProposal + 1,
-		currentVal: 10,
+		CurrentVal: 10,
 	}
 	BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), msg)
 
@@ -152,7 +152,7 @@ func (px *Paxos) runAcceptor(msg Message) {
 				Type:       "promise",
 				ProposalId: msg.ProposalId,
 				AcceptId:   px.minProposal,
-				currentVal: px.acceptedVal,
+				CurrentVal: px.acceptedVal,
 			}
 			log.Info(fmt.Sprintf("promise returned"))
 			BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), promiseMessage)
@@ -160,18 +160,18 @@ func (px *Paxos) runAcceptor(msg Message) {
 		//otherwise reject
 
 	case "accept": // phase 2
-		log.Info(fmt.Sprintf("[proposer:%d] phase 2, acceptMsg current val:%v", px.me, msg.currentVal))
+		log.Info(fmt.Sprintf("[proposer:%d] phase 2, acceptMsg current val:%v", px.me, msg.CurrentVal))
 
 		if msg.ProposalId >= px.minProposal {
 			px.minProposal = msg.ProposalId
-			px.acceptedVal = msg.currentVal
+			px.acceptedVal = msg.CurrentVal
 			log.Info(fmt.Sprintf("[proposer:%d] Value accepted, current val:%v", px.me, px.ReturnValue()))
 
 			acceptedMsg := Message{
 				Type:       "accepted",
 				ProposalId: msg.ProposalId,
 				AcceptId:   msg.ProposalId,
-				currentVal: msg.currentVal,
+				CurrentVal: msg.CurrentVal,
 			}
 			BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), acceptedMsg)
 		}
@@ -199,7 +199,7 @@ func (px *Paxos) Propose(s int) {
 	msg := Message{
 		Type:       "accept",
 		ProposalId: px.minProposal,
-		currentVal: s,
+		CurrentVal: s,
 	}
 	log.Info(fmt.Sprintf("accept sended %+v\n", msg))
 	BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), msg)

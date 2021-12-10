@@ -48,6 +48,7 @@ func sendGenericMessage(conn *net.UDPConn, address string, msg GenericMessage) e
 
 func broadcastGenericMsg(conn *net.UDPConn, addresses []string, msg GenericMessage) {
 	buffer, err := json.Marshal(msg)
+	log.Warn("---wtf---" + string(buffer))
 	if err != nil {
 		log.Fatal("Failed to encode messsage: " + err.Error())
 	}
