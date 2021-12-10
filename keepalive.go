@@ -2,17 +2,18 @@ package paxos
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type KeepAliveMessage struct {
 	Id int
 }
 
-const KeepAlivePeriod = 10 * time.Second
+const KeepAlivePeriod = 3 * time.Second
 const KeepAliveCheckInterval = 1 * time.Second
 
 type HeartBeatState struct {

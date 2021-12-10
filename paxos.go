@@ -47,7 +47,7 @@ func (px *Paxos) run(state *GlobalState) {
 	// If no consensus were reached
 	for {
 		NewPaxosMessage := <-state.PaxosMessageQueue
-		fmt.Printf("Received paxos message: %v", NewPaxosMessage)
+		fmt.Printf("Received prepare paxos message: %v", NewPaxosMessage)
 	}
 	// switch msg.Type {
 	// case "prepare": // proposer --> acceptor

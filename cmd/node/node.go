@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"io/ioutil"
+	"time"
 
 	"github.com/atgao/paxos"
 )
@@ -23,9 +24,15 @@ func main() {
 
 	state, err := paxos.GlobalInitialize([]byte(config))
 
+	t := time.NewTimer(8 * time.Second)
+	select {
+	case <-t.C:
+	}
+
 	px1 := paxos.Make(1, state)
 	// px2 := paxos.Make(2,state)
 	prepareMessage := px1.Prepare()
 	paxos.BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), prepareMessage)
 
+	select {}
 }
