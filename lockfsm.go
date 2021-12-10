@@ -1,8 +1,7 @@
 package paxos
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"sync"
@@ -53,9 +52,8 @@ func ResponseLockRelayMessages(servConn *net.UDPConn, selfId int, lockLog []Lock
 	}
 	for i := range lockLog {
 		if lockLog[i].OriginServerId == selfId {
-			var buffer bytes.Buffer
-			enc := gob.NewEncoder(&buffer)
-			if err := enc.Encode(lockRes[i]); err != nil {
+			buffer, err := json.Marshal(lockRes[i])
+			if err != nil {
 				log.Fatal("Failed to encode lock result: " + err.Error())
 			}
 			if err := sendOneAddr(servConn, lockLog[i].ClientAddr, buffer); err != nil {

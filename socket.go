@@ -1,8 +1,7 @@
 package paxos
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -14,15 +13,15 @@ type GenericMessage struct {
 	LockRelay *LockRelayMessage
 }
 
-func sendOneAddr(conn *net.UDPConn, address *net.UDPAddr, buffer bytes.Buffer) error {
-	_, err := conn.WriteTo(buffer.Bytes(), address)
+func sendOneAddr(conn *net.UDPConn, address *net.UDPAddr, buffer []byte) error {
+	_, err := conn.WriteTo(buffer, address)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func sendOne(conn *net.UDPConn, address string, buffer bytes.Buffer) error {
+func sendOne(conn *net.UDPConn, address string, buffer []byte) error {
 	raddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		return err
@@ -30,7 +29,7 @@ func sendOne(conn *net.UDPConn, address string, buffer bytes.Buffer) error {
 	return sendOneAddr(conn, raddr, buffer)
 }
 
-func broadcast(conn *net.UDPConn, addresses []string, buffer bytes.Buffer) {
+func broadcast(conn *net.UDPConn, addresses []string, buffer []byte) {
 	for _, address := range addresses {
 		if err := sendOne(conn, address, buffer); err != nil {
 			log.Fatal("Failed to send msaage to %s: err: %s", address, err)
@@ -39,18 +38,16 @@ func broadcast(conn *net.UDPConn, addresses []string, buffer bytes.Buffer) {
 }
 
 func sendGenericMessage(conn *net.UDPConn, address string, msg GenericMessage) error {
-	var buffer bytes.Buffer
-	enc := gob.NewEncoder(&buffer)
-	if err := enc.Encode(msg); err != nil {
+	buffer, err := json.Marshal(msg)
+	if err != nil {
 		log.Fatal("Failed to encode messsage: " + err.Error())
 	}
 	return sendOne(conn, address, buffer)
 }
 
 func broadcastGenericMsg(conn *net.UDPConn, addresses []string, msg GenericMessage) {
-	var buffer bytes.Buffer
-	enc := gob.NewEncoder(&buffer)
-	if err := enc.Encode(msg); err != nil {
+	buffer, err := json.Marshal(msg)
+	if err != nil {
 		log.Fatal("Failed to encode messsage: " + err.Error())
 	}
 	broadcast(conn, addresses, buffer)
@@ -76,16 +73,17 @@ func UDPServeGenericMessage(conn *net.UDPConn, ch chan GenericMessage) {
 	go func() {
 		for {
 			n, addr, err := conn.ReadFromUDP(buf)
+			newbuf := append(make([]byte, 0), buf[:n]...)
+			log.Warn("Received message: " + string(newbuf))
 			if err != nil {
 				log.Warn(fmt.Sprintf("Error read from UDP: " + err.Error()))
 				continue
 			}
 			log.Info(fmt.Sprintf("Received %d bytes from %v", n, addr))
-			r := bytes.NewBuffer(buf)
-			dec := gob.NewDecoder(r)
+
 			var msg = GenericMessage{}
-			err = dec.Decode(&msg)
-			if err != nil {
+			if err := json.Unmarshal(newbuf, &msg); err != nil {
+				log.Warn(string(newbuf))
 				log.Warn(fmt.Sprintf("Error decoding message: " + err.Error()))
 			}
 			ch <- msg
