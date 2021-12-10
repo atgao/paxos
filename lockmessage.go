@@ -1,8 +1,7 @@
 package paxos
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -23,16 +22,15 @@ func UDPServeLockMessage(selfId int, conn *net.UDPConn, ch chan GenericMessage) 
 	go func() {
 		for {
 			n, addr, err := conn.ReadFromUDP(buf)
+			newbuf := append(make([]byte, 0), buf[:n]...)
 			if err != nil {
 				log.Warn(fmt.Sprintf("Error read from UDP: " + err.Error()))
 				continue
 			}
 			log.Info(fmt.Sprintf("Received %d bytes from %v", n, addr))
-			r := bytes.NewBuffer(buf)
-			dec := gob.NewDecoder(r)
 			var msg = LockMessage{}
-			err = dec.Decode(&msg)
-			if err != nil {
+			if err := json.Unmarshal(newbuf, &msg); err != nil {
+				log.Warn(string(newbuf))
 				log.Warn(fmt.Sprintf("Error decoding message: " + err.Error()))
 			}
 			ch <- GenericMessage{LockRelay: &LockRelayMessage{msg.Lock, selfId, addr}}
