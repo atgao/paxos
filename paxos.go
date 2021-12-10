@@ -2,6 +2,8 @@ package paxos
 
 import (
 	"fmt"
+
+	log "github.com/sirupsen/logrus"
 ) // for testing
 
 //
@@ -9,12 +11,12 @@ import (
 //
 
 type Message struct {
-	Type               string      // prepare, propose, accept, accepted etc
-	ProposalId         int         // id proposed
-	currentVal         interface{} // value for currrent round of proposal
-	AcceptId           int         // id accepted
-	highestAcceptedVal interface{} // value from the highest proposer ID acceptor
-	decidedVal         interface{} // value from the consensus
+	ProposalId         int    // id proposed
+	currentVal         int    // value for currrent round of proposal
+	AcceptId           int    // id accepted
+	highestAcceptedVal string // value from the highest proposer ID acceptor
+	Type               string // prepare, propose, accept, accepted etc
+	decidedVal         string // value from the consensus
 }
 
 // Go object implementing single Paxos node
@@ -22,14 +24,13 @@ type Paxos struct {
 	me int // id in the peers array
 
 	// proposalId is also the highest one seen so far
-	acceptedProposal interface{}     // the number of the last proposal the server has accepted for this entry
-	acceptedVal      interface{}     // the value in the last proposal the server accepted for this entry
+	acceptedProposal string          // the number of the last proposal the server has accepted for this entry
+	acceptedVal      int             // the value in the last proposal the server accepted for this entry
 	acceptedMessages map[int]Message //not sure it's still needed
 	lastLogIndex     int             //the largest entry for which this server has accepted a proposal
 	minProposal      int             //the number of the smallest proposal this server will accept for any log entry
 	globalstate      *GlobalState
 	role             string // leader (proposer) or acceptor
-	promiseReceived  bool
 }
 
 func Make(me int, state *GlobalState) *Paxos {
@@ -37,10 +38,9 @@ func Make(me int, state *GlobalState) *Paxos {
 	px.me = me          // my index in the sendQueue array
 	px.role = "A"       // for acceptor ??? may need to fix...
 	px.minProposal = -1 // this way when we start its 0 (Kaiming: bookmark for now)
-	px.acceptedVal = nil
+	px.acceptedVal = -1
 	px.acceptedMessages = make(map[int]Message)
 	px.globalstate = state
-	px.promiseReceived = false
 	go px.run(state)
 	return px
 }
@@ -50,10 +50,10 @@ func (px *Paxos) run(state *GlobalState) {
 	// If no consensus were reached
 	for {
 		NewPaxosMessage := <-state.PaxosMessageQueue
-		fmt.Printf("Received paxos message to run: %v", NewPaxosMessage)
+		log.Info(fmt.Sprintf("Received paxos message to run: %v", NewPaxosMessage))
 		switch NewPaxosMessage.Type {
 		case "prepare": // proposer --> acceptor
-			fmt.Println("Proposer start run... val:", NewPaxosMessage.ProposalId)
+			log.Info(fmt.Sprintf("Proposer start run... val:", NewPaxosMessage.ProposalId))
 			px.runAcceptor(NewPaxosMessage)
 
 			// BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), NewPaxosMessage)
@@ -74,10 +74,9 @@ func (px *Paxos) run(state *GlobalState) {
 	// }
 }
 func (px *Paxos) runPromisor(msg Message) {
-	px.promiseReceived = true
 	if msg.ProposalId > px.minProposal {
 		px.minProposal = msg.ProposalId
-		fmt.Printf("promise received\n")
+		log.Info(fmt.Sprintf("promise received\n"))
 	}
 
 }
@@ -90,10 +89,11 @@ func (px *Paxos) Prepare(state *GlobalState) {
 
 	//creating an array of messages, each message have different To target
 	//right now we just send the message to every acceptor (m=3))
-	fmt.Printf("Prepare is called...\n")
+	log.Info(fmt.Sprintf("Prepare is called...\n"))
 	msg := Message{
 		Type:       "prepare",
 		ProposalId: px.minProposal + 1,
+		currentVal: 10,
 	}
 	BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), msg)
 
@@ -144,7 +144,7 @@ func (px *Paxos) runAcceptor(msg Message) {
 
 	switch msg.Type {
 	case "prepare": // phase 1
-		fmt.Printf("[proposer:%d] phase 1, prepareMsg:%v", px.minProposal, msg.ProposalId)
+		log.Info(fmt.Sprintf("[proposer:%d] phase 1, prepareMsg:%v", px.minProposal, msg.ProposalId))
 
 		if msg.ProposalId > px.minProposal {
 			px.minProposal = msg.ProposalId
@@ -154,18 +154,18 @@ func (px *Paxos) runAcceptor(msg Message) {
 				AcceptId:   px.minProposal,
 				currentVal: px.acceptedVal,
 			}
-			fmt.Printf("promise returned")
+			log.Info(fmt.Sprintf("promise returned"))
 			BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), promiseMessage)
 		}
 		//otherwise reject
 
 	case "accept": // phase 2
-		fmt.Printf("[proposer:%d] phase 2, acceptMsg current val:%v", px.me, msg.currentVal)
+		log.Info(fmt.Sprintf("[proposer:%d] phase 2, acceptMsg current val:%v", px.me, msg.currentVal))
 
 		if msg.ProposalId >= px.minProposal {
 			px.minProposal = msg.ProposalId
 			px.acceptedVal = msg.currentVal
-			fmt.Printf("[proposer:%d] Value accepted, current val:%v", px.me, px.ReturnValue())
+			log.Info(fmt.Sprintf("[proposer:%d] Value accepted, current val:%v", px.me, px.ReturnValue()))
 
 			acceptedMsg := Message{
 				Type:       "accepted",
@@ -187,7 +187,7 @@ func (px *Paxos) runAcceptor(msg Message) {
 // TODO / NOTE: only call prepare when starting election
 
 // TODO / NOTE: only the leader should be calling this
-func (px *Paxos) Propose(s interface{}) {
+func (px *Paxos) Propose(s int) {
 
 	// if px.role != "L" {
 	// 	return
@@ -201,10 +201,9 @@ func (px *Paxos) Propose(s interface{}) {
 		ProposalId: px.minProposal,
 		currentVal: s,
 	}
-	fmt.Printf("accept sended %v\n", msg.currentVal)
-	if px.promiseReceived {
-		BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), msg)
-	}
+	log.Info(fmt.Sprintf("accept sended %+v\n", msg))
+	BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), msg)
+
 }
 
 // function for majority threshold

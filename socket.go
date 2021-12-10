@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type GenericMessage struct {
@@ -58,7 +59,9 @@ func broadcastGenericMsg(conn *net.UDPConn, addresses []string, msg GenericMessa
 
 func BroadcastPaxosMessage(conn *net.UDPConn, addresses []string, msg Message) {
 	log.Info("Broadcasting paxos message")
-	broadcastGenericMsg(conn, addresses, GenericMessage{&msg, nil, nil})
+	gmsg := GenericMessage{&msg, nil, nil}
+	log.Warn(fmt.Sprintf("paxos msg %+v", *gmsg.Paxos))
+	broadcastGenericMsg(conn, addresses, gmsg)
 }
 
 func BroadcastKeepAliveMessage(conn *net.UDPConn, addresses []string, msg KeepAliveMessage) {

@@ -2,8 +2,9 @@ package paxos
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type GlobalState struct {
@@ -29,13 +30,13 @@ func MessageRouter(messageQueue chan GenericMessage, paxosMessageQueue chan Mess
 		select {
 		case genericMessage := <-messageQueue:
 			if genericMessage.Paxos != nil {
-				log.Info(fmt.Sprintf("Received paxos message: %v", *genericMessage.Paxos))
+				log.Info(fmt.Sprintf("Received paxos message: %+v", *genericMessage.Paxos))
 				paxosMessageQueue <- *genericMessage.Paxos
 			} else if genericMessage.KeepAlive != nil {
-				log.Info(fmt.Sprintf("Received keep alive message: %v", *genericMessage.KeepAlive))
+				log.Info(fmt.Sprintf("Received keep alive message: %+v", *genericMessage.KeepAlive))
 				keepAliveMessageQueue <- *genericMessage.KeepAlive
 			} else if genericMessage.LockRelay != nil {
-				log.Info(fmt.Sprintf("Received lock message: %v", *genericMessage.LockRelay))
+				log.Info(fmt.Sprintf("Received lock message: %+v", *genericMessage.LockRelay))
 				lockRelayMessageQueue <- *genericMessage.LockRelay
 			} else {
 				log.Warn("Unrecognized message")

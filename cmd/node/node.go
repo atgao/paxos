@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/atgao/paxos"
 )
 
@@ -48,12 +50,12 @@ func TestSingleProposer(state *paxos.GlobalState) {
 	px[0].Prepare(state)
 	time.Sleep(2 * time.Second)
 
-	px[0].Propose("100")
+	px[0].Propose(100)
 	time.Sleep(4 * time.Second)
 
 	for i := 0; i < 3; i++ {
-		if px[i].ReturnValue() != "100" {
-			fmt.Printf("wrong decided value, want value:%v decided value:%v", 100, px[i].ReturnValue())
+		if px[i].ReturnValue() != 100 {
+			log.Info(fmt.Sprintf("wrong decided value, want value:%v decided value:%v", 100, px[i].ReturnValue()))
 		}
 	}
 
