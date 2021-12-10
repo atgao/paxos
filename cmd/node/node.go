@@ -49,7 +49,7 @@ func TestSingleProposer(state *paxos.GlobalState) {
 	time.Sleep(2 * time.Second)
 
 	px[0].Propose("100")
-	time.Sleep(2 * time.Second)
+	time.Sleep(4 * time.Second)
 
 	for i := 0; i < 3; i++ {
 		if px[i].ReturnValue() != "100" {

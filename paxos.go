@@ -29,6 +29,7 @@ type Paxos struct {
 	minProposal      int             //the number of the smallest proposal this server will accept for any log entry
 	globalstate      *GlobalState
 	role             string // leader (proposer) or acceptor
+	promiseReceived  bool
 }
 
 func Make(me int, state *GlobalState) *Paxos {
@@ -39,6 +40,7 @@ func Make(me int, state *GlobalState) *Paxos {
 	px.acceptedVal = nil
 	px.acceptedMessages = make(map[int]Message)
 	px.globalstate = state
+	px.promiseReceived = false
 	go px.run(state)
 	return px
 }
@@ -46,7 +48,7 @@ func Make(me int, state *GlobalState) *Paxos {
 // this go routine keeps on running in the background
 func (px *Paxos) run(state *GlobalState) {
 	// If no consensus were reached
-	for px.acceptedVal == nil {
+	for {
 		NewPaxosMessage := <-state.PaxosMessageQueue
 		fmt.Printf("Received paxos message to run: %v", NewPaxosMessage)
 		switch NewPaxosMessage.Type {
@@ -57,7 +59,7 @@ func (px *Paxos) run(state *GlobalState) {
 			// BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), NewPaxosMessage)
 			//Proposor send prepare message to acceptor to reach majority consensus.
 		case "promise":
-			fmt.Println("Received promise message:", NewPaxosMessage.ProposalId)
+			px.runPromisor(NewPaxosMessage)
 			// BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), NewPaxosMessage)
 
 		case "accept": // proposer --> acceptor
@@ -70,6 +72,14 @@ func (px *Paxos) run(state *GlobalState) {
 	}
 
 	// }
+}
+func (px *Paxos) runPromisor(msg Message) {
+	px.promiseReceived = true
+	if msg.ProposalId > px.minProposal {
+		px.minProposal = msg.ProposalId
+		fmt.Printf("promise received\n")
+	}
+
 }
 
 func (px *Paxos) ReturnValue() interface{} {
@@ -144,7 +154,7 @@ func (px *Paxos) runAcceptor(msg Message) {
 				AcceptId:   px.minProposal,
 				currentVal: px.acceptedVal,
 			}
-			fmt.Println("promise returned")
+			fmt.Printf("promise returned")
 			BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), promiseMessage)
 		}
 		//otherwise reject
@@ -155,6 +165,7 @@ func (px *Paxos) runAcceptor(msg Message) {
 		if msg.ProposalId >= px.minProposal {
 			px.minProposal = msg.ProposalId
 			px.acceptedVal = msg.currentVal
+			fmt.Printf("[proposer:%d] Value accepted, current val:%v", px.me, px.ReturnValue())
 
 			acceptedMsg := Message{
 				Type:       "accepted",
@@ -190,8 +201,10 @@ func (px *Paxos) Propose(s interface{}) {
 		ProposalId: px.minProposal,
 		currentVal: s,
 	}
-	fmt.Printf("accept sended %v", msg.currentVal)
-	BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), msg)
+	fmt.Printf("accept sended %v\n", msg.currentVal)
+	if px.promiseReceived {
+		BroadcastPaxosMessage(px.globalstate.InterNodeUDPSock, px.globalstate.Config.AllPeerAddresses(), msg)
+	}
 }
 
 // function for majority threshold
