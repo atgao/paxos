@@ -1,8 +1,7 @@
 package paxos
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
@@ -27,25 +26,26 @@ func RequestLockServer(clientSock *net.UDPConn, server string, lock bool) bool {
 			}
 		}()
 	*/
-	var buffer bytes.Buffer
-	enc := gob.NewEncoder(&buffer)
-	if err := enc.Encode(LockMessage{lock}); err != nil {
+	buffer, err := json.Marshal(LockMessage{lock})
+	if err != nil {
 		log.Fatal("Failed to encode lock message")
 	}
-	if _, err := clientSock.WriteTo(buffer.Bytes(), addr); err != nil {
+
+	if _, err := clientSock.WriteTo(buffer, addr); err != nil {
 		log.Fatal("Failed to send lock message")
 	}
 
+	readBuffer := make([]byte, 1024)
 	ch := make(chan bool)
 	go func() {
-		_, err := clientSock.Read(buffer.Bytes())
+		n, _, err := clientSock.ReadFromUDP(readBuffer)
+		readBufferResized := append(make([]byte, 0), readBuffer[:n]...)
 		if err != nil {
 			log.Warn("Failed to read server response: " + err.Error())
 			return
 		}
-		dec := gob.NewDecoder(&buffer)
 		var b bool
-		if err := dec.Decode(&b); err != nil {
+		if err := json.Unmarshal(readBufferResized, &b); err != nil {
 			log.Warn("Bad response from server " + err.Error())
 			ch <- false
 		} else {
