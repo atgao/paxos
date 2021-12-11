@@ -17,6 +17,7 @@ type GlobalState struct {
 	KeepAliveMessageQueue chan KeepAliveMessage
 	LockRelayMessageQueue chan LockRelayMessage
 	LockState             *LockState
+	PaxosNodeState        *PaxosNodeState
 }
 
 func sendInitialHeartBeat(state *GlobalState) {

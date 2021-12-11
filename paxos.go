@@ -2,6 +2,7 @@ package paxos
 
 import (
 	"fmt"
+	"math"
 
 	log "github.com/sirupsen/logrus"
 ) // for testing
@@ -10,15 +11,142 @@ import (
 // struct for messages sent between nodes
 //
 
-type Message struct {
-	ProposalId         int    // id proposed
-	CurrentVal         int    // value for currrent round of proposal
-	AcceptId           int    // id accepted
-	HighestAcceptedVal string // value from the highest proposer ID acceptor
-	Type               string // prepare, propose, accept, accepted etc
-	DecidedVal         string // value from the consensus
+type ProposalValue struct {
 }
 
+type ProposalNumber struct {
+	N        int
+	SenderId int
+}
+
+type PrepareMessage struct {
+	ProposalNumber ProposalNumber
+	LogEntryIndex  int
+}
+
+type PrepareResponseMessage struct {
+	AcceptedProposalNumber ProposalNumber
+	AcceptedValue          ProposalValue
+	NoMoreAccepted         bool
+}
+
+type AcceptMessage struct {
+	ProposalNumber     ProposalNumber
+	LogEntryIndex      int
+	Value              ProposalValue
+	FirstUnchosenIndex int
+}
+
+type AcceptResponseMessage struct {
+	MinProposal        ProposalNumber
+	FirstUnchosenIndex int
+}
+
+type SuccessMessage struct {
+	LogEntryIndex int
+	Value         ProposalValue
+}
+
+type SuccessResponseMessage struct {
+	FirstUnchosenIndex int
+}
+
+type Message struct {
+	SenderId        int // the actual proposal number is ProposalNumber and SenderId
+	Prepare         *PrepareMessage
+	PrepareResponse *PrepareResponseMessage
+	Accept          *AcceptMessage
+	AcceptResponse  *AcceptResponseMessage
+	Success         *SuccessMessage
+	SuccessResponse *SuccessResponseMessage
+	/*
+		ProposalId         int    // id proposed
+		CurrentVal         int    // value for currrent round of proposal
+		AcceptId           int    // id accepted
+		HighestAcceptedVal string // value from the highest proposer ID acceptor
+		Type               string // prepare, propose, accept, accepted etc
+		DecidedVal         string // value from the consensus
+	*/
+}
+
+type LogEntry struct {
+	AcceptedProposalNumber ProposalNumber
+	AcceptedValue          ProposalValue
+}
+
+type AcceptorPersistentState struct {
+	LastLogIndex       int
+	MinProposal        ProposalNumber
+	Log                []LogEntry
+	FirstUnchosenIndex int
+}
+
+type ProposerPersistentState struct {
+	MaxRound int
+}
+
+type ProposerVolatileState struct {
+	NextIndex int
+	Prepared  bool
+}
+
+type PaxosNodeState struct {
+	AcceptorPersistentState AcceptorPersistentState
+	ProposerPersistentState ProposerPersistentState
+	ProposerVolatileState   ProposerVolatileState
+}
+
+func (p ProposalNumber) GEq(rhs ProposalNumber) bool {
+	return p.N > rhs.N || (p.N == rhs.N && p.SenderId > rhs.SenderId)
+}
+
+func (state *GlobalState) ProcessPrepareMessage(msg PrepareMessage) PrepareResponseMessage {
+	if msg.ProposalNumber.GEq(state.PaxosNodeState.AcceptorPersistentState.MinProposal) {
+		state.PaxosNodeState.AcceptorPersistentState.MinProposal = msg.ProposalNumber
+	}
+	noMoreAccepted := true
+	for i := msg.LogEntryIndex + 1; i != len(state.PaxosNodeState.AcceptorPersistentState.Log); i++ {
+		if state.PaxosNodeState.AcceptorPersistentState.Log[i].AcceptedProposalNumber.N != 0 {
+			noMoreAccepted = false
+		}
+	}
+	return PrepareResponseMessage{
+		AcceptedProposalNumber: state.PaxosNodeState.AcceptorPersistentState.Log[msg.LogEntryIndex].AcceptedProposalNumber,
+		AcceptedValue:          state.PaxosNodeState.AcceptorPersistentState.Log[msg.LogEntryIndex].AcceptedValue,
+		NoMoreAccepted:         noMoreAccepted,
+	}
+}
+
+func (state *GlobalState) ProcessAcceptMessage(msg AcceptMessage) AcceptResponseMessage {
+	if msg.ProposalNumber.GEq(state.PaxosNodeState.AcceptorPersistentState.MinProposal) {
+		state.PaxosNodeState.AcceptorPersistentState.Log[msg.LogEntryIndex] = LogEntry{
+			msg.ProposalNumber,
+			msg.Value,
+		}
+		state.PaxosNodeState.AcceptorPersistentState.MinProposal = msg.ProposalNumber
+	}
+	for index := state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex; index < msg.FirstUnchosenIndex; index++ {
+		if state.PaxosNodeState.AcceptorPersistentState.Log[index].AcceptedProposalNumber == msg.ProposalNumber {
+			state.PaxosNodeState.AcceptorPersistentState.Log[index].AcceptedProposalNumber = math.MaxInt
+		}
+	}
+	return AcceptResponseMessage{
+		MinProposal:        state.PaxosNodeState.AcceptorPersistentState.MinProposal,
+		FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex,
+	}
+}
+func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessResponseMessage {
+	state.PaxosNodeState.AcceptorPersistentState.Log[msg.LogEntryIndex] = LogEntry{
+		ProposalNumber{
+			N:        math.MaxInt,
+			SenderId: 0,
+		},
+		msg.Value,
+	}
+	return SuccessResponseMessage{FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex}
+}
+
+/*
 // Go object implementing single Paxos node
 type Paxos struct {
 	me int // id in the peers array
@@ -44,6 +172,7 @@ func Make(me int, state *GlobalState) *Paxos {
 	go px.run(state)
 	return px
 }
+*/
 
 // this go routine keeps on running in the background
 func (px *Paxos) run(state *GlobalState) {
