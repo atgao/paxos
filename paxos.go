@@ -151,8 +151,16 @@ func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessRespo
 }
 
 func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId int) {
+	used := false
 	dispatcher := MakeDispatcher(func(msg Message) bool {
-		return msg.SenderId == targetId && msg.SuccessResponse != nil
+		if used {
+			return false
+		}
+		if msg.SenderId == targetId && msg.SuccessResponse != nil {
+			used = true
+			return true
+		}
+		return false
 	})
 	AddPaxosMessageDispatcher(state, dispatcher)
 
