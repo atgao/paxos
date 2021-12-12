@@ -50,6 +50,15 @@ func AddPaxosMessageDispatcher(state *GlobalState, dispatcher *Dispatcher) {
 
 func RemovePaxosMessageDispatcher(state *GlobalState, dispatcher *Dispatcher) {
 	delete(state.PaxosMessageDispatchers, dispatcher)
+	close(dispatcher.ch)
+	for {
+		v, more := <-dispatcher.ch
+		if more {
+			state.PaxosMessageQueue <- v
+		} else {
+			break
+		}
+	}
 }
 
 func sendInitialHeartBeat(state *GlobalState) {

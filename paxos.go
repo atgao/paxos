@@ -155,7 +155,6 @@ func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId in
 		return msg.SenderId == targetId && msg.SuccessResponse != nil
 	})
 	AddPaxosMessageDispatcher(state, dispatcher)
-	defer RemovePaxosMessageDispatcher(state, dispatcher)
 
 	sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[targetId], GenericMessage{Paxos: &Message{
 		SenderId: state.Config.SelfId,
@@ -166,6 +165,7 @@ func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId in
 	}})
 
 	reply := <-dispatcher.ch
+	RemovePaxosMessageDispatcher(state, dispatcher)
 	if reply.SuccessResponse.FirstUnchosenIndex < state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex {
 		state.SendSuccessMessage(reply.SuccessResponse.FirstUnchosenIndex, targetId)
 	}
