@@ -2,6 +2,7 @@ package paxos
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"net"
 
 	log "github.com/sirupsen/logrus"
@@ -28,6 +29,12 @@ type Dispatcher struct {
 
 func MakeDispatcher(filter func(Message) bool) *Dispatcher {
 	return &Dispatcher{filter, make(chan Message)}
+}
+
+func MakeUUIDDispatcher(uuid uuid.UUID) *Dispatcher {
+	return MakeDispatcher(func(msg Message) bool {
+		return msg.Uuid == uuid
+	})
 }
 
 func DispatchPaxosMessage(state *GlobalState) {
