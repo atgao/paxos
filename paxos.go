@@ -1,6 +1,7 @@
 package paxos
 
 import (
+	"github.com/google/uuid"
 	"math"
 ) // for testing
 
@@ -52,7 +53,8 @@ type SuccessResponseMessage struct {
 }
 
 type Message struct {
-	SenderId        int // the actual proposal number is ProposalNumber and SenderId
+	SenderId        int       // the actual proposal number is ProposalNumber and SenderId
+	Uuid            uuid.UUID // matching the message and response
 	Prepare         *PrepareMessage
 	PrepareResponse *PrepareResponseMessage
 	Accept          *AcceptMessage
@@ -100,8 +102,12 @@ func MakePaxosNodeState() *PaxosNodeState {
 	return &PaxosNodeState{} // TODO: initialize
 }
 
-func (p ProposalNumber) GEq(rhs ProposalNumber) bool {
+func (p ProposalNumber) GE(rhs ProposalNumber) bool {
 	return p.N > rhs.N || (p.N == rhs.N && p.SenderId > rhs.SenderId)
+}
+
+func (p ProposalNumber) GEq(rhs ProposalNumber) bool {
+	return p.GE(rhs) || p == rhs
 }
 
 func (state *GlobalState) ProcessPrepareMessage(msg PrepareMessage) PrepareResponseMessage {
@@ -151,21 +157,16 @@ func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessRespo
 }
 
 func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId int) {
-	used := false
+	successUUID := uuid.New()
+
 	dispatcher := MakeDispatcher(func(msg Message) bool {
-		if used {
-			return false
-		}
-		if msg.SenderId == targetId && msg.SuccessResponse != nil {
-			used = true
-			return true
-		}
-		return false
+		return msg.Uuid == successUUID
 	})
 	AddPaxosMessageDispatcher(state, dispatcher)
 
 	sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[targetId], GenericMessage{Paxos: &Message{
 		SenderId: state.Config.SelfId,
+		Uuid:     successUUID,
 		Success: &SuccessMessage{
 			LogEntryIndex: firstUnchosenIndex,
 			Value:         state.PaxosNodeState.AcceptorPersistentState.Log[firstUnchosenIndex].AcceptedValue,
@@ -184,61 +185,62 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 	var n int
 	var value ProposalValue
 	var NumberOfNoMoreAccepted int
+	var pn ProposalNumber
 
 	if state.HeartBeatState.CurrentLeaderId(state.Config) != state.Config.SelfId {
 		return false
 	}
-	 
-	if state.PaxosNodeState.ProposerVolatileState.Prepared == true{
-		index := state.PaxosNodeState.ProposerVolatileState.NextIndex
-		state.PaxosNodeState.ProposerVolatileState.NextIndex += 1
-	}else{
-		index := state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex
-		state.PaxosNodeState.ProposerVolatileState.NextIndex = (index+1)
-		n := state.PaxosNodeState.ProposerPersistentState.MaxRound + 1
-		
-		pn := ProposalNumber{N:n,SenderId: state.Config.SelfId}
 
-		PrepareMsg := PrepareMessage{ProposalNumber:&pn,LogEntryIndex:&index}
+	if state.PaxosNodeState.ProposerVolatileState.Prepared == true {
+		index = state.PaxosNodeState.ProposerVolatileState.NextIndex
+		state.PaxosNodeState.ProposerVolatileState.NextIndex += 1
+		pn = ProposalNumber{state.PaxosNodeState.ProposerPersistentState.MaxRound, state.Config.SelfId}
+	} else {
+		index = state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex
+		state.PaxosNodeState.ProposerVolatileState.NextIndex = (index + 1)
+		n = state.PaxosNodeState.ProposerPersistentState.MaxRound + 1
+
+		pn = ProposalNumber{N: n, SenderId: state.Config.SelfId}
+
+		PrepareMsg := PrepareMessage{ProposalNumber: &pn, LogEntryIndex: &index}
 
 		Msg := Message{SenderID: state.Config.SelfId, Prepare: &PrepareMsg}
-		
 
-		dispatcher := MakeDispatcher(func(msg Message)bool{
-			if msg.PrepareResponse != nil{
-				if msg.PrepareResponse.AcceptedProposalNumber == pn && msg.PrepareResponse.LogEntryIndex == index{
+		dispatcher := MakeDispatcher(func(msg Message) bool {
+			if msg.PrepareResponse != nil {
+				if msg.PrepareResponse.AcceptedProposalNumber == pn && msg.PrepareResponse.LogEntryIndex == index {
 					return true
 				}
 				return false
 			}
 			return false
 		})
-		AddPaxosMessageDispatcher(state,dispatcher)
+		AddPaxosMessageDispatcher(state, dispatcher)
 
 		state.Broadcast(Msg)
 
-		defer RemovePaxosMessageDispatcher(state,dispatcher)
-		
+		defer RemovePaxosMessageDispatcher(state, dispatcher)
+
 		for {
 			NewPaxosMessage := <-dispatcher.ch
 
-			if (majorityReached()){
+			if majorityReached() {
 				NumberOfNoMoreAccepted = 0
 				Majorityqueue = []Message
 				maxAcceptedProposal := Majorityqueue[0]
-		
-				for i:=0;i<len(Majorityqueue);i++{
-					if Majorityqueue[i]>max{
+
+				for i := 0; i < len(Majorityqueue); i++ {
+					if Majorityqueue[i] > max {
 						max = Majorityqueue[i]
 					}
 					if //placeholder
-						 {
+					{
 						NumberOfNoMoreAccepted += 1
-						}
+					}
 				}
-				if maxAcceptedProposal!=0{
+				if maxAcceptedProposal != 0 {
 					value = maxAcceptedProposal.acceptedValue
-				}else{
+				} else {
 					value = inputValue
 				}
 				if len(Majorityqueue) == NumberOfNoMoreAccepted {
@@ -252,7 +254,46 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 
 	}
 
-	
+	acceptUUID := uuid.New()
+	dispatcher := MakeDispatcher(func(msg Message) bool {
+		return msg.Uuid == acceptUUID
+	})
+	AddPaxosMessageDispatcher(state, dispatcher)
 
+	acceptMessage := &AcceptMessage{
+		ProposalNumber:     pn,
+		LogEntryIndex:      index,
+		Value:              value,
+		FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex,
+	}
+	BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), Message{
+		SenderId: state.Config.SelfId, Accept: acceptMessage,
+		Uuid: acceptUUID,
+	})
+
+	goodToContinue := make(chan bool)
+	p := func() {
+		for num := 0; num != len(state.Config.PeerAddress); num++ {
+			if num == len(state.Config.PeerAddress)/2+1 {
+				goodToContinue <- true
+			}
+			reply := <-dispatcher.ch
+			acceptReply := reply.AcceptResponse
+			if acceptReply.MinProposal.GE(pn) {
+				state.PaxosNodeState.ProposerPersistentState.MaxRound = acceptReply.MinProposal.N
+				state.PaxosNodeState.ProposerVolatileState.Prepared = false
+				goodToContinue <- false
+			}
+			if acceptReply.FirstUnchosenIndex <= state.PaxosNodeState.AcceptorPersistentState.LastLogIndex &&
+				state.PaxosNodeState.AcceptorPersistentState.Log[acceptReply.FirstUnchosenIndex].AcceptedProposalNumber.N == math.MaxInt {
+				state.SendSuccessMessage(acceptReply.FirstUnchosenIndex, reply.SenderId)
+			}
+		}
+	}
+	go p()
+
+	if <-goodToContinue {
+
+	}
 
 }
