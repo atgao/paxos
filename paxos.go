@@ -310,7 +310,18 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 	go p()
 
 	if <-goodToContinue {
-
+		state.PaxosNodeState.AcceptorPersistentState.Log[index] = LogEntry{
+			AcceptedProposalNumber: ProposalNumber{
+				N:        math.MaxInt,
+				SenderId: 0,
+			},
+			AcceptedValue: value,
+		}
+	} else {
+		continue
 	}
 
+	if value == inputValue {
+		return true
+	}
 }
