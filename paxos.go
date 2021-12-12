@@ -104,7 +104,6 @@ func (p ProposalNumber) GEq(rhs ProposalNumber) bool {
 	return p.N > rhs.N || (p.N == rhs.N && p.SenderId > rhs.SenderId)
 }
 
-
 func (state *GlobalState) ProcessPrepareMessage(msg PrepareMessage) PrepareResponseMessage {
 	if msg.ProposalNumber.GEq(state.PaxosNodeState.AcceptorPersistentState.MinProposal) {
 		state.PaxosNodeState.AcceptorPersistentState.MinProposal = msg.ProposalNumber
@@ -151,10 +150,34 @@ func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessRespo
 	return SuccessResponseMessage{FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex}
 }
 
-func(state *GlobalState) Broadcast(msg Message){
-	BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), msg)
-}
+func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId int) {
+	used := false
+	dispatcher := MakeDispatcher(func(msg Message) bool {
+		if used {
+			return false
+		}
+		if msg.SenderId == targetId && msg.SuccessResponse != nil {
+			used = true
+			return true
+		}
+		return false
+	})
+	AddPaxosMessageDispatcher(state, dispatcher)
 
+	sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[targetId], GenericMessage{Paxos: &Message{
+		SenderId: state.Config.SelfId,
+		Success: &SuccessMessage{
+			LogEntryIndex: firstUnchosenIndex,
+			Value:         state.PaxosNodeState.AcceptorPersistentState.Log[firstUnchosenIndex].AcceptedValue,
+		},
+	}})
+
+	reply := <-dispatcher.ch
+	RemovePaxosMessageDispatcher(state, dispatcher)
+	if reply.SuccessResponse.FirstUnchosenIndex < state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex {
+		state.SendSuccessMessage(reply.SuccessResponse.FirstUnchosenIndex, targetId)
+	}
+}
 
 func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 	var index int
