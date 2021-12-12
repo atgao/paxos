@@ -1,8 +1,9 @@
 package paxos
 
 import (
-	"github.com/google/uuid"
 	"math"
+
+	"github.com/google/uuid"
 ) // for testing
 
 //
@@ -137,7 +138,7 @@ func (state *GlobalState) ProcessAcceptMessage(msg AcceptMessage) AcceptResponse
 	}
 	for index := state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex; index < msg.FirstUnchosenIndex; index++ {
 		if state.PaxosNodeState.AcceptorPersistentState.Log[index].AcceptedProposalNumber == msg.ProposalNumber {
-			state.PaxosNodeState.AcceptorPersistentState.Log[index].AcceptedProposalNumber = math.MaxInt
+			state.PaxosNodeState.AcceptorPersistentState.Log[index].AcceptedProposalNumber.N = math.MaxInt
 		}
 	}
 	return AcceptResponseMessage{
@@ -241,7 +242,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 			Majorityqueue = append(Majorityqueue, NewPaxosMessage)
 
 			if state.majorityReached(Majorityqueue) == true {
-				NumberOfNoMoreAccepted := 0
+				NumberOfNoMoreAccepted = 0
 				maxAcceptedProposal := Majorityqueue[0].PrepareResponse.AcceptedProposalNumber.N
 				var maxIndex = -1
 
@@ -267,8 +268,6 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 			}
 
 		}
-		//placeholder
-
 	}
 
 	acceptUUID := uuid.New()
@@ -313,4 +312,8 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 
 	}
 
+
+
+
+}
 }
