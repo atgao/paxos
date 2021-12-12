@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"flag"
-	"fmt"
-	"io/ioutil"
-	"time"
-
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"io/ioutil"
+	"net"
+	"os"
+	"time"
 
 	"github.com/atgao/paxos"
 )
@@ -14,6 +16,7 @@ import (
 // var state *paxos.GlobalState
 
 func main() {
+	log.SetReportCaller(true)
 	configPath := flag.String("config", "", "Config file path")
 	flag.Parse()
 	if *configPath == "" {
@@ -28,37 +31,27 @@ func main() {
 	state, err := paxos.GlobalInitialize([]byte(config))
 	time.Sleep(4 * time.Second)
 
-	// TestNewPaxosNode(state)
-	TestSingleProposer(state)
+	if state.Config.SelfId == 3 || state.Config.SelfId == 4 {
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		state.ProposerAlgorithm(paxos.ProposalValue{
+			Lock: true,
+			Addr: net.UDPAddr{
+				Port: state.Config.SelfId,
+			},
+			UUID: uuid.New(),
+		})
+
+		state.ProposerAlgorithm(paxos.ProposalValue{
+			Lock: true,
+			Addr: net.UDPAddr{
+				Port: state.Config.SelfId,
+			},
+			UUID: uuid.New(),
+		})
+	}
+
 	select {}
-}
-
-func TestNewPaxosNode(state *paxos.GlobalState) {
-
-	var px []*paxos.Paxos
-	for i := 0; i < 3; i++ {
-		px = append(px, paxos.Make(i, state))
-	}
-	px[0].Prepare(state)
-}
-
-func TestSingleProposer(state *paxos.GlobalState) {
-	var px []*paxos.Paxos
-	for i := 0; i < 3; i++ {
-		px = append(px, paxos.Make(i, state))
-	}
-	px[0].Prepare(state)
-	time.Sleep(2 * time.Second)
-
-	px[0].Propose(100)
-	time.Sleep(4 * time.Second)
-
-	for i := 0; i < 3; i++ {
-		if px[i].ReturnValue() != 100 {
-			log.Info(fmt.Sprintf("wrong decided value, want value:%v decided value:%v", 100, px[i].ReturnValue()))
-		}
-	}
-
 }
 
 // func TestLearner(state *paxos.GlobalState) {

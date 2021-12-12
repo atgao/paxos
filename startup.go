@@ -28,7 +28,7 @@ type Dispatcher struct {
 }
 
 func MakeDispatcher(filter func(Message) bool) *Dispatcher {
-	return &Dispatcher{filter, make(chan Message)}
+	return &Dispatcher{filter, make(chan Message, 1024)}
 }
 
 func MakeUUIDDispatcher(uuid uuid.UUID) *Dispatcher {
@@ -140,8 +140,66 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 		&LockState{}, MakePaxosNodeState(), make(map[*Dispatcher]bool)}
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
+	log.Info("Started message router")
 	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
+	log.Info("Started keep alive worker")
 	go LockRelay(state)
+	log.Info("Started lock relay")
 	go DispatchPaxosMessage(state)
+	log.Info("Started paxos message dispatcher")
+
+	prepareDispatcher := MakeDispatcher(func(msg Message) bool {
+		return msg.Prepare != nil
+	})
+	acceptDispatcher := MakeDispatcher(func(msg Message) bool {
+		return msg.Accept != nil
+	})
+	successDispatcher := MakeDispatcher(func(msg Message) bool {
+		return msg.Success != nil
+	})
+	AddPaxosMessageDispatcher(state, prepareDispatcher)
+	AddPaxosMessageDispatcher(state, acceptDispatcher)
+	AddPaxosMessageDispatcher(state, successDispatcher)
+
+	go func() {
+		for {
+			select {
+			case msg := <-prepareDispatcher.ch:
+				res := state.ProcessPrepareMessage(*(msg.Prepare))
+				log.Info(fmt.Sprintf("Processing prepare %+v message from %d", msg.Uuid, msg.SenderId))
+				if err := sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[msg.SenderId],
+					GenericMessage{Paxos: &Message{
+						SenderId:        state.Config.SelfId,
+						Uuid:            msg.Uuid,
+						PrepareResponse: &res,
+					}}); err != nil {
+					log.Warn("Failed to send prepare response: " + err.Error())
+				}
+			case msg := <-acceptDispatcher.ch:
+				res := state.ProcessAcceptMessage(*(msg.Accept))
+				log.Info(fmt.Sprintf("Processing accept %+v message from %d", msg.Uuid, msg.SenderId))
+				if err := sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[msg.SenderId],
+					GenericMessage{Paxos: &Message{
+						SenderId:       state.Config.SelfId,
+						Uuid:           msg.Uuid,
+						AcceptResponse: &res,
+					}}); err != nil {
+					log.Warn("Failed to send prepare response: " + err.Error())
+				}
+			case msg := <-successDispatcher.ch:
+				res := state.ProcessSuccessMessage(*(msg.Success))
+				log.Info(fmt.Sprintf("Processing success %+v message from %d", msg.Uuid, msg.SenderId))
+				if err := sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[msg.SenderId],
+					GenericMessage{Paxos: &Message{
+						SenderId:        state.Config.SelfId,
+						Uuid:            msg.Uuid,
+						SuccessResponse: &res,
+					}}); err != nil {
+					log.Warn("Failed to send prepare response: " + err.Error())
+				}
+			}
+		}
+	}()
+
 	return state, nil
 }

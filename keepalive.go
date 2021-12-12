@@ -39,7 +39,7 @@ func KeepAliveWorker(conn *net.UDPConn, config *Config, state *HeartBeatState, c
 	for {
 		select {
 		case <-toSendAliveTimer.C:
-			BroadcastKeepAliveMessage(conn, state.AllAlivePeerAddresses(config),
+			BroadcastKeepAliveMessage(conn, config.AllPeerAddresses(),
 				KeepAliveMessage{config.SelfId})
 			log.Info("Sent heartbeat message")
 		case <-timer.C:
@@ -81,6 +81,7 @@ func (state *HeartBeatState) AlivePeers() []int {
 	return m
 }
 
+/*
 func (state *HeartBeatState) AllAlivePeerAddresses(config *Config) []string {
 	state.mu.Lock()
 	defer state.mu.Unlock()
@@ -93,6 +94,7 @@ func (state *HeartBeatState) AllAlivePeerAddresses(config *Config) []string {
 	}
 	return addresses
 }
+*/
 
 func (state *HeartBeatState) CurrentLeaderId(config *Config) int {
 	leader := config.SelfId

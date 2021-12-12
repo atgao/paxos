@@ -43,6 +43,7 @@ func sendGenericMessage(conn *net.UDPConn, address string, msg GenericMessage) e
 	if err != nil {
 		log.Fatal("Failed to encode messsage: " + err.Error())
 	}
+	log.Warn("Sending generic message %s", string(buffer))
 	return sendOne(conn, address, buffer)
 }
 
@@ -56,7 +57,7 @@ func broadcastGenericMsg(conn *net.UDPConn, addresses []string, msg GenericMessa
 }
 
 func BroadcastPaxosMessage(conn *net.UDPConn, addresses []string, msg Message) {
-	log.Info("Broadcasting paxos message")
+	log.Info(fmt.Sprintf("Broadcasting paxos message: %+v", msg))
 	gmsg := GenericMessage{&msg, nil, nil}
 	log.Warn(fmt.Sprintf("paxos msg %+v", *gmsg.Paxos))
 	broadcastGenericMsg(conn, addresses, gmsg)

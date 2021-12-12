@@ -1,3 +1,4 @@
+package paxos
 
 /*
 // Go object implementing single Paxos node
