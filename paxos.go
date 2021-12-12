@@ -180,12 +180,26 @@ func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId in
 	}
 }
 
+func (state *GlobalState) majorityReached(slice []Message) bool {
+	if len(slice) > len(state.Config.PeerAddress)/2+1 {
+		return true
+	} else {
+		return false
+	}
+
+}
+
+func (state *GlobalState) Broadcast(msg Message) {
+	BroadcastPaxosMessage(state.InterNodeUDPSock, state.Config.AllPeerAddresses(), msg)
+}
 func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
+
 	var index int
 	var n int
 	var value ProposalValue
 	var NumberOfNoMoreAccepted int
 	var pn ProposalNumber
+	var Majorityqueue []Message
 
 	if state.HeartBeatState.CurrentLeaderId(state.Config) != state.Config.SelfId {
 		return false
@@ -202,9 +216,9 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 
 		pn = ProposalNumber{N: n, SenderId: state.Config.SelfId}
 
-		PrepareMsg := PrepareMessage{ProposalNumber: &pn, LogEntryIndex: &index}
+		PrepareMsg := PrepareMessage{ProposalNumber: pn, LogEntryIndex: index}
 
-		Msg := Message{SenderID: state.Config.SelfId, Prepare: &PrepareMsg}
+		Msg := Message{SenderId: state.Config.SelfId, Prepare: &PrepareMsg}
 
 		dispatcher := MakeDispatcher(func(msg Message) bool {
 			if msg.PrepareResponse != nil {
@@ -222,24 +236,27 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 		defer RemovePaxosMessageDispatcher(state, dispatcher)
 
 		for {
-			NewPaxosMessage := <-dispatcher.ch
 
-			if majorityReached() {
-				NumberOfNoMoreAccepted = 0
-				Majorityqueue = []Message
-				maxAcceptedProposal := Majorityqueue[0]
+			NewPaxosMessage := <-dispatcher.ch
+			Majorityqueue = append(Majorityqueue, NewPaxosMessage)
+
+			if state.majorityReached(Majorityqueue) == true {
+				NumberOfNoMoreAccepted := 0
+				maxAcceptedProposal := Majorityqueue[0].PrepareResponse.AcceptedProposalNumber.N
+				var maxIndex = -1
 
 				for i := 0; i < len(Majorityqueue); i++ {
-					if Majorityqueue[i] > max {
-						max = Majorityqueue[i]
+					if Majorityqueue[i].PrepareResponse.AcceptedProposalNumber.N > maxAcceptedProposal {
+						maxAcceptedProposal = Majorityqueue[i].PrepareResponse.AcceptedProposalNumber.N
+						maxIndex = i
 					}
-					if //placeholder
-					{
+					if Majorityqueue[i].PrepareResponse.NoMoreAccepted == true {
+
 						NumberOfNoMoreAccepted += 1
 					}
 				}
 				if maxAcceptedProposal != 0 {
-					value = maxAcceptedProposal.acceptedValue
+					value = Majorityqueue[maxIndex].PrepareResponse.AcceptedValue
 				} else {
 					value = inputValue
 				}
