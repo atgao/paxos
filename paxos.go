@@ -2,6 +2,7 @@ package paxos
 
 import (
 	"math"
+	"net"
 
 	"github.com/google/uuid"
 ) // for testing
@@ -11,6 +12,9 @@ import (
 //
 
 type ProposalValue struct {
+	Lock bool
+	Addr net.UDPAddr
+	UUID uuid.UUID
 }
 
 type ProposalNumber struct {
