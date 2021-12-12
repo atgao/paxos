@@ -314,7 +314,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 			continue
 		}
 
-		if value == inputValue {
+		if value.UUID == inputValue.UUID {
 			return true
 		}
 	}
