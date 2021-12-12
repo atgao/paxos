@@ -22,6 +22,7 @@ type PrepareMessage struct {
 }
 
 type PrepareResponseMessage struct {
+	LogEntryIndex          int
 	AcceptedProposalNumber ProposalNumber
 	AcceptedValue          ProposalValue
 	NoMoreAccepted         bool
@@ -35,6 +36,7 @@ type AcceptMessage struct {
 }
 
 type AcceptResponseMessage struct {
+	LogEntryIndex      int
 	MinProposal        ProposalNumber
 	FirstUnchosenIndex int
 }
@@ -45,6 +47,7 @@ type SuccessMessage struct {
 }
 
 type SuccessResponseMessage struct {
+	LogEntryIndex      int
 	FirstUnchosenIndex int
 }
 
@@ -91,6 +94,10 @@ type PaxosNodeState struct {
 	AcceptorPersistentState AcceptorPersistentState
 	ProposerPersistentState ProposerPersistentState
 	ProposerVolatileState   ProposerVolatileState
+}
+
+func MakePaxosNodeState() *PaxosNodeState {
+	return &PaxosNodeState{} // TODO: initialize
 }
 
 func (p ProposalNumber) GEq(rhs ProposalNumber) bool {

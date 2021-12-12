@@ -8,16 +8,44 @@ import (
 )
 
 type GlobalState struct {
-	Config                *Config
-	HeartBeatState        *HeartBeatState
-	InterNodeUDPSock      *net.UDPConn
-	ClientFacingUDPSock   *net.UDPConn
-	MessageQueue          chan GenericMessage
-	PaxosMessageQueue     chan Message
-	KeepAliveMessageQueue chan KeepAliveMessage
-	LockRelayMessageQueue chan LockRelayMessage
-	LockState             *LockState
-	PaxosNodeState        *PaxosNodeState
+	Config                  *Config
+	HeartBeatState          *HeartBeatState
+	InterNodeUDPSock        *net.UDPConn
+	ClientFacingUDPSock     *net.UDPConn
+	MessageQueue            chan GenericMessage
+	PaxosMessageQueue       chan Message
+	KeepAliveMessageQueue   chan KeepAliveMessage
+	LockRelayMessageQueue   chan LockRelayMessage
+	LockState               *LockState
+	PaxosNodeState          *PaxosNodeState
+	PaxosMessageDispatchers map[*Dispatcher]bool
+}
+
+type Dispatcher struct {
+	Filter func(Message) bool
+	ch     chan Message
+}
+
+func DispatchPaxosMessage(state *GlobalState) {
+	for {
+		select {
+		case msg := <-state.PaxosMessageQueue:
+			for dispatcher, _ := range state.PaxosMessageDispatchers {
+				if dispatcher.Filter(msg) {
+					dispatcher.ch <- msg
+					break
+				}
+			}
+		}
+	}
+}
+
+func AddPaxosMessageDispatcher(state *GlobalState, dispatcher *Dispatcher) {
+	state.PaxosMessageDispatchers[dispatcher] = true
+}
+
+func RemovePaxosMessageDispatcher(state *GlobalState, dispatcher *Dispatcher) {
+	delete(state.PaxosMessageDispatchers, dispatcher)
 }
 
 func sendInitialHeartBeat(state *GlobalState) {
@@ -88,10 +116,12 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 		log.Fatal("Failed to listen on UDP")
 	}
 	state := &GlobalState{config, InitHeartBeatState(config), pc, pcserv, ch,
-		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage), &LockState{}}
+		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage),
+		&LockState{}, MakePaxosNodeState(), make(map[*Dispatcher]bool)}
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
 	go LockRelay(state)
+	go DispatchPaxosMessage(state)
 	return state, nil
 }
