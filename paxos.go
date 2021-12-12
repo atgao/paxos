@@ -104,7 +104,6 @@ func (p ProposalNumber) GEq(rhs ProposalNumber) bool {
 	return p.N > rhs.N || (p.N == rhs.N && p.SenderId > rhs.SenderId)
 }
 
-
 func (state *GlobalState) ProcessPrepareMessage(msg PrepareMessage) PrepareResponseMessage {
 	if msg.ProposalNumber.GEq(state.PaxosNodeState.AcceptorPersistentState.MinProposal) {
 		state.PaxosNodeState.AcceptorPersistentState.MinProposal = msg.ProposalNumber
@@ -151,6 +150,27 @@ func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessRespo
 	return SuccessResponseMessage{FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex}
 }
 
+func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId int) {
+	dispatcher := MakeDispatcher(func(msg Message) bool {
+		return msg.SenderId == targetId && msg.SuccessResponse != nil
+	})
+	AddPaxosMessageDispatcher(state, dispatcher)
+	defer RemovePaxosMessageDispatcher(state, dispatcher)
+
+	sendGenericMessage(state.InterNodeUDPSock, state.Config.PeerAddress[targetId], GenericMessage{Paxos: &Message{
+		SenderId: state.Config.SelfId,
+		Success: &SuccessMessage{
+			LogEntryIndex: firstUnchosenIndex,
+			Value:         state.PaxosNodeState.AcceptorPersistentState.Log[firstUnchosenIndex].AcceptedValue,
+		},
+	}})
+
+	reply := <-dispatcher.ch
+	if reply.SuccessResponse.FirstUnchosenIndex < state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex {
+		state.SendSuccessMessage(reply.SuccessResponse.FirstUnchosenIndex, targetId)
+	}
+}
+
 func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 	var index int
 	var value ProposalValue
@@ -159,36 +179,36 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 	if state.HeartBeatState.CurrentLeaderId(state.Config) != state.Config.SelfId {
 		return false
 	}
-	 
-	if state.PaxosNodeState.ProposerVolatileState.Prepared == true{
+
+	if state.PaxosNodeState.ProposerVolatileState.Prepared == true {
 		index = state.PaxosNodeState.ProposerVolatileState.NextIndex
 		state.PaxosNodeState.ProposerVolatileState.NextIndex += 1
-	}else{
+	} else {
 		index = state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex
-		state.PaxosNodeState.ProposerVolatileState.NextIndex = (index+1)
+		state.PaxosNodeState.ProposerVolatileState.NextIndex = (index + 1)
 		//placeholder for broadcasting
 		BroadcastPaxosMessage()
 	}
 	//placeholder for receiving responses
 	NewPaxosMessage := <-
 	//placeholder
-	if majorityReached(){
+	if majorityReached() {
 		NumberOfNoMoreAccepted = 0
 		Majorityqueue = []Message
 		maxAcceptedProposal := Majorityqueue[0]
 
-		for i:=0;i<len(Majorityqueue);i++{
-			if Majorityqueue[i]>max{
+		for i := 0; i < len(Majorityqueue); i++ {
+			if Majorityqueue[i] > max {
 				max = Majorityqueue[i]
 			}
 			if //placeholder
-			 	{
+			{
 				NumberOfNoMoreAccepted += 1
-				}
+			}
 		}
-		if maxAcceptedProposal!=0{
+		if maxAcceptedProposal != 0 {
 			value = maxAcceptedProposal.acceptedValue
-		}else{
+		} else {
 			value = inputValue
 		}
 		if len(Majorityqueue) == NumberOfNoMoreAccepted {
@@ -198,6 +218,5 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 	}
 	BroadcastPaxosMessage([accept])
 	NewAcceptPaxosMessage := <-
-	
 
 }
