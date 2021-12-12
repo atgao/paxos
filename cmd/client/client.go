@@ -5,16 +5,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/atgao/paxos"
+	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
-import "github.com/atgao/paxos"
 
 type command interface {
-	execute(clientSock *net.UDPConn)
+	execute(clientSock *net.UDPConn, UUID uuid.UUID)
 }
 
 type SleepCommand struct {
@@ -29,15 +31,15 @@ type UnlockCommand struct {
 	server string
 }
 
-func (comm SleepCommand) execute(clientSock *net.UDPConn) {
+func (comm SleepCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
 	time.Sleep(comm.time)
 }
 
-func (comm LockCommand) execute(clientSock *net.UDPConn) {
+func (comm LockCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
 	paxos.RequestLockServer(clientSock, comm.server, true)
 }
 
-func (comm UnlockCommand) execute(clientSock *net.UDPConn) {
+func (comm UnlockCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
 	paxos.RequestLockServer(clientSock, comm.server, false)
 }
 
@@ -69,6 +71,8 @@ func parser(line string) (command, error) {
 }
 
 func main() {
+	UUID := uuid.New()
+
 	clientAddr := flag.String("address", "", "Client address")
 	flag.Parse()
 	if *clientAddr == "" {
@@ -91,7 +95,7 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			comm.execute(clientSock)
+			comm.execute(clientSock, UUID)
 		}
 	}
 }
