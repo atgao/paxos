@@ -26,6 +26,10 @@ type Dispatcher struct {
 	ch     chan Message
 }
 
+func MakeDispatcher(filter func(Message) bool) *Dispatcher {
+	return &Dispatcher{filter, make(chan Message)}
+}
+
 func DispatchPaxosMessage(state *GlobalState) {
 	for {
 		select {
