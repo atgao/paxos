@@ -5,22 +5,24 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"net"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type GlobalState struct {
-	Config                  *Config
-	HeartBeatState          *HeartBeatState
-	InterNodeUDPSock        *net.UDPConn
-	ClientFacingUDPSock     *net.UDPConn
-	MessageQueue            chan GenericMessage
-	PaxosMessageQueue       chan Message
-	KeepAliveMessageQueue   chan KeepAliveMessage
-	LockRelayMessageQueue   chan LockRelayMessage
-	LockState               *LockState
-	PaxosNodeState          *PaxosNodeState
-	PaxosMessageDispatchers map[*Dispatcher]bool
+	Config                    *Config
+	HeartBeatState            *HeartBeatState
+	InterNodeUDPSock          *net.UDPConn
+	ClientFacingUDPSock       *net.UDPConn
+	MessageQueue              chan GenericMessage
+	PaxosMessageQueue         chan Message
+	KeepAliveMessageQueue     chan KeepAliveMessage
+	LockRelayMessageQueue     chan LockRelayMessage
+	LockState                 *LockState
+	PaxosNodeState            *PaxosNodeState
+	PaxosMessageDispatchers   map[*Dispatcher]bool
+	PaxosMessageDispatchersMu sync.Mutex
 }
 
 type Dispatcher struct {
@@ -42,22 +44,35 @@ func DispatchPaxosMessage(state *GlobalState) {
 	for {
 		select {
 		case msg := <-state.PaxosMessageQueue:
+			state.PaxosMessageDispatchersMu.Lock()
+			/*
+				currentDispatchers := make([]*Dispatcher, 0)
+				for dispatcher := range state.PaxosMessageDispatchers {
+					currentDispatchers = append(currentDispatchers, dispatcher)
+				}
+
+			*/
 			for dispatcher := range state.PaxosMessageDispatchers {
 				if dispatcher.Filter(msg) {
 					dispatcher.ch <- msg
 					break
 				}
 			}
+			state.PaxosMessageDispatchersMu.Unlock()
 		}
 	}
 }
 
 func AddPaxosMessageDispatcher(state *GlobalState, dispatcher *Dispatcher) {
+	state.PaxosMessageDispatchersMu.Lock()
 	state.PaxosMessageDispatchers[dispatcher] = true
+	state.PaxosMessageDispatchersMu.Unlock()
 }
 
 func RemovePaxosMessageDispatcher(state *GlobalState, dispatcher *Dispatcher) {
+	state.PaxosMessageDispatchersMu.Lock()
 	delete(state.PaxosMessageDispatchers, dispatcher)
+	state.PaxosMessageDispatchersMu.Unlock()
 	close(dispatcher.ch)
 	for {
 		v, more := <-dispatcher.ch
@@ -155,7 +170,7 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	}
 	state := &GlobalState{config, InitHeartBeatState(config), pc, pcserv, ch,
 		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage),
-		&LockState{}, MakePaxosNodeStateFromPersistentFile(config.StateFile), make(map[*Dispatcher]bool)}
+		&LockState{}, MakePaxosNodeStateFromPersistentFile(config.StateFile), make(map[*Dispatcher]bool), sync.Mutex{}}
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	log.Info("Started message router")

@@ -326,6 +326,9 @@ func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessRespo
 }
 
 func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId int) {
+	if state.PaxosNodeState.AcceptorPersistentState.getLog(firstUnchosenIndex).AcceptedProposalNumber.N != math.MaxInt {
+		log.Fatal("Trying to send success message for a non chosen proposal")
+	}
 	successUUID := uuid.New()
 
 	dispatcher := MakeDispatcher(func(msg Message) bool {
@@ -371,6 +374,8 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 		var pn ProposalNumber
 		var Majorityqueue []Message
 
+		isSlowPath := false
+
 		state.PaxosNodeState.ProposerVolatileState.mu.Lock()
 		if state.PaxosNodeState.ProposerVolatileState.Prepared == true {
 			index = state.PaxosNodeState.ProposerVolatileState.NextIndex
@@ -379,6 +384,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 			value = inputValue
 			log.Info("Already prepared, fast path, proposal number: %v", pn)
 		} else {
+			isSlowPath = true
 			index = state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex()
 			state.PaxosNodeState.ProposerVolatileState.NextIndex = index + 1
 			state.PaxosNodeState.ProposerPersistentState.MaxRound++
@@ -430,7 +436,9 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 
 			}
 		}
-		state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
+		if !isSlowPath {
+			state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
+		}
 
 		acceptUUID := uuid.New()
 		dispatcher := MakeUUIDDispatcher(acceptUUID)
@@ -459,18 +467,18 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 				}
 				reply := <-dispatcher.ch
 				acceptReply := reply.AcceptResponse
-				if acceptReply.MinProposal.GE(pn) {
-					state.PaxosNodeState.ProposerPersistentState.MaxRound = acceptReply.MinProposal.N
-					state.PaxosNodeState.persistentToFile(state.Config.StateFile)
-					state.PaxosNodeState.ProposerVolatileState.mu.Lock()
-					state.PaxosNodeState.ProposerVolatileState.Prepared = false
-					state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
-					send = true
-					res = false
+				if !sent {
+					if acceptReply.MinProposal.GE(pn) {
+						state.PaxosNodeState.ProposerPersistentState.MaxRound = acceptReply.MinProposal.N
+						state.PaxosNodeState.persistentToFile(state.Config.StateFile)
+						state.PaxosNodeState.ProposerVolatileState.Prepared = false
+						send = true
+						res = false
+					}
 				}
 				if acceptReply.FirstUnchosenIndex <= state.PaxosNodeState.AcceptorPersistentState.LastLogIndex &&
 					state.PaxosNodeState.AcceptorPersistentState.getLog(acceptReply.FirstUnchosenIndex).AcceptedProposalNumber.N == math.MaxInt {
-					state.SendSuccessMessage(acceptReply.FirstUnchosenIndex, reply.SenderId)
+					go state.SendSuccessMessage(acceptReply.FirstUnchosenIndex, reply.SenderId)
 				}
 				if send && !sent {
 					sent = true
@@ -484,6 +492,9 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 
 		if <-goodToContinue {
 			state.setChooseProposal(index, value)
+			for id, _ := range state.Config.PeerAddress {
+				go state.SendSuccessMessage(index, id)
+			}
 			/*
 				state.PaxosNodeState.AcceptorPersistentState.setLogProposalNumber(index, ProposalNumber{
 					N:        math.MaxInt,
@@ -492,12 +503,21 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 				state.PaxosNodeState.AcceptorPersistentState.setLogProposalValue(index, value)
 			*/
 		} else {
+			if isSlowPath {
+				state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
+			}
 			continue
 		}
 
 		if value.MsgUUID == inputValue.MsgUUID {
 			state.PaxosNodeState.persistentToFile(state.Config.StateFile)
+			if isSlowPath {
+				state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
+			}
 			return true
+		}
+		if isSlowPath {
+			state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
 		}
 	}
 }
