@@ -18,9 +18,15 @@ import (
 func main() {
 	log.SetReportCaller(true)
 	configPath := flag.String("config", "", "Config file path")
+	verbose := flag.Int("verbose", 0, "Verbose output")
 	flag.Parse()
 	if *configPath == "" {
 		panic("Config file path is empty")
+	}
+	if *verbose == 1 {
+		log.SetLevel(log.DebugLevel)
+	} else if *verbose >= 2 {
+		log.SetLevel(log.TraceLevel)
 	}
 
 	config, err := ioutil.ReadFile(*configPath)

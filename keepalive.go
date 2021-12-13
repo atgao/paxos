@@ -41,7 +41,6 @@ func KeepAliveWorker(conn *net.UDPConn, config *Config, state *HeartBeatState, c
 		case <-toSendAliveTimer.C:
 			BroadcastKeepAliveMessage(conn, config.AllPeerAddresses(),
 				KeepAliveMessage{config.SelfId})
-			log.Info("Sent heartbeat message")
 		case <-timer.C:
 			// check keep alive
 			for _, i := range state.AlivePeers() {
@@ -49,16 +48,22 @@ func KeepAliveWorker(conn *net.UDPConn, config *Config, state *HeartBeatState, c
 				r2 := state.lastAliveTime[i]
 				r := r1.Sub(r2)
 				if r > 2*KeepAlivePeriod {
-					//if (time.Now().Sub(state.lastAliveTime[i])) > 2*KeepAlivePeriod {
-					log.Info(fmt.Sprintf("Peer %d dead", i))
+					log.Info(fmt.Sprintf("Peer %d dead, current alive peers %v, current leader %d", i,
+						state.AlivePeers(), state.CurrentLeaderId(config)))
 					state.setPeerAliveStatus(i, false)
 				}
 			}
 		case m := <-ch:
+			toPrint := false
+			if state.alivePeers[m.Id] == false {
+				toPrint = true
+			}
 			state.lastAliveTime[m.Id] = time.Now()
 			state.setPeerAliveStatus(m.Id, true)
-			log.Info(fmt.Sprintf("Received heartbeat from peer %d, current alive peers %v, current leader %d", m,
-				state.AlivePeers(), state.CurrentLeaderId(config)))
+			if toPrint {
+				log.Info(fmt.Sprintf("Received new heartbeat from peer %d, current alive peers %v, current leader %d", m,
+					state.AlivePeers(), state.CurrentLeaderId(config)))
+			}
 		}
 	}
 }

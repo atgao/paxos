@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math"
 	"net"
+	"sync"
 
 	"github.com/google/uuid"
 ) // for testing
@@ -84,13 +85,27 @@ type LogEntry struct {
 }
 
 type AcceptorPersistentState struct {
+	mu                 sync.Mutex
 	LastLogIndex       int
 	MinProposal        ProposalNumber
 	log                []LogEntry
-	FirstUnchosenIndex int
+	firstUnchosenIndex int
+}
+
+func (st *AcceptorPersistentState) FirstUnchosenIndex() int {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.firstUnchosenIndex
+}
+func (st *AcceptorPersistentState) SetFirstUnchosenIndex(v int) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.firstUnchosenIndex = v
 }
 
 func (st *AcceptorPersistentState) getLog(i int) LogEntry {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	for i >= len(st.log) {
 		st.log = append(st.log, LogEntry{
 			AcceptedProposalNumber: ProposalNumber{
@@ -104,15 +119,19 @@ func (st *AcceptorPersistentState) getLog(i int) LogEntry {
 }
 
 func (st *AcceptorPersistentState) logSize() int {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	return len(st.log)
 }
 
 func (st *AcceptorPersistentState) setLogProposalNumber(i int, pn ProposalNumber) {
 	st.getLog(i)
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	st.log[i].AcceptedProposalNumber = pn
 	if pn.N == math.MaxInt {
-		for st.FirstUnchosenIndex < len(st.log) && st.log[st.FirstUnchosenIndex].AcceptedProposalNumber.N == math.MaxInt {
-			st.FirstUnchosenIndex++
+		for st.firstUnchosenIndex < len(st.log) && st.log[st.firstUnchosenIndex].AcceptedProposalNumber.N == math.MaxInt {
+			st.firstUnchosenIndex++
 		}
 	}
 	if pn.N != 0 && i > st.LastLogIndex {
@@ -122,6 +141,8 @@ func (st *AcceptorPersistentState) setLogProposalNumber(i int, pn ProposalNumber
 
 func (st *AcceptorPersistentState) setLogProposalValue(i int, v ProposalValue) {
 	st.getLog(i)
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	st.log[i].AcceptedValue = &v
 }
 
@@ -148,7 +169,7 @@ func MakePaxosNodeState() *PaxosNodeState {
 			LastLogIndex:       -1,
 			MinProposal:        ProposalNumber{},
 			log:                nil,
-			FirstUnchosenIndex: 0,
+			firstUnchosenIndex: 0,
 		},
 	} // TODO: initialize
 }
@@ -186,7 +207,8 @@ func (state *GlobalState) ProcessAcceptMessage(msg AcceptMessage) AcceptResponse
 			state.PaxosNodeState.AcceptorPersistentState.getLog(msg.LogEntryIndex)))
 		state.PaxosNodeState.AcceptorPersistentState.MinProposal = msg.ProposalNumber
 	}
-	for index := state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex; index < msg.FirstUnchosenIndex; index++ {
+	firstUnchosenIndex := state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex()
+	for index := firstUnchosenIndex; index < msg.FirstUnchosenIndex; index++ {
 		if state.PaxosNodeState.AcceptorPersistentState.getLog(index).AcceptedProposalNumber == msg.ProposalNumber {
 			state.PaxosNodeState.AcceptorPersistentState.setLogProposalNumber(index, ProposalNumber{N: math.MaxInt})
 			log.Info(fmt.Sprintf("Log %d updated with accept message %+v", index,
@@ -195,15 +217,15 @@ func (state *GlobalState) ProcessAcceptMessage(msg AcceptMessage) AcceptResponse
 	}
 	return AcceptResponseMessage{
 		MinProposal:        state.PaxosNodeState.AcceptorPersistentState.MinProposal,
-		FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex,
+		FirstUnchosenIndex: firstUnchosenIndex,
 	}
 }
 func (state *GlobalState) ProcessSuccessMessage(msg SuccessMessage) SuccessResponseMessage {
 	state.PaxosNodeState.AcceptorPersistentState.setLogProposalNumber(msg.LogEntryIndex, ProposalNumber{N: math.MaxInt})
 	state.PaxosNodeState.AcceptorPersistentState.setLogProposalValue(msg.LogEntryIndex, msg.Value)
-	log.Info(fmt.Sprintf("Log %d updated with accept message %+v", msg.LogEntryIndex,
+	log.Info(fmt.Sprintf("Log %d updated with success message %+v", msg.LogEntryIndex,
 		state.PaxosNodeState.AcceptorPersistentState.getLog(msg.LogEntryIndex)))
-	return SuccessResponseMessage{FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex}
+	return SuccessResponseMessage{FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex()}
 }
 
 func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId int) {
@@ -225,7 +247,7 @@ func (state *GlobalState) SendSuccessMessage(firstUnchosenIndex int, targetId in
 
 	reply := <-dispatcher.ch
 	RemovePaxosMessageDispatcher(state, dispatcher)
-	if reply.SuccessResponse.FirstUnchosenIndex < state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex {
+	if reply.SuccessResponse.FirstUnchosenIndex < state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex() {
 		state.SendSuccessMessage(reply.SuccessResponse.FirstUnchosenIndex, targetId)
 	}
 }
@@ -258,7 +280,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 			value = inputValue
 			log.Info("Already prepared, fast path, proposal number: %v", pn)
 		} else {
-			index = state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex
+			index = state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex()
 			state.PaxosNodeState.ProposerVolatileState.NextIndex = index + 1
 			state.PaxosNodeState.ProposerPersistentState.MaxRound++
 			pn = ProposalNumber{N: state.PaxosNodeState.ProposerPersistentState.MaxRound, SenderId: state.Config.SelfId}
@@ -317,7 +339,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue ProposalValue) bool {
 			ProposalNumber:     pn,
 			LogEntryIndex:      index,
 			Value:              value,
-			FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex,
+			FirstUnchosenIndex: state.PaxosNodeState.AcceptorPersistentState.FirstUnchosenIndex(),
 		}
 		state.Broadcast(Message{
 			SenderId: state.Config.SelfId, Accept: acceptMessage,
