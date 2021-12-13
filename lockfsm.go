@@ -9,11 +9,7 @@ import (
 
 type LockState struct {
 	mu         sync.Mutex
-	lockholder *net.UDPAddr
-}
-
-func UDPAddrEq(addr1 net.UDPAddr, addr2 net.UDPAddr) bool {
-	return addr1.String() == addr2.String()
+	lockholder *string
 }
 
 func (lockState *LockState) transition(msg LockRelayMessage) bool {
@@ -21,7 +17,7 @@ func (lockState *LockState) transition(msg LockRelayMessage) bool {
 	defer lockState.mu.Unlock()
 	if msg.Lock == true {
 		if lockState.lockholder == nil {
-			lockState.lockholder = msg.ClientAddr
+			lockState.lockholder = &msg.ClientID
 			return true
 		} else {
 			return false
@@ -29,7 +25,7 @@ func (lockState *LockState) transition(msg LockRelayMessage) bool {
 	} else {
 		if lockState.lockholder == nil {
 			return false
-		} else if UDPAddrEq(*lockState.lockholder, *msg.ClientAddr) {
+		} else if *lockState.lockholder == msg.ClientID {
 			lockState.lockholder = nil
 			return true
 		} else {

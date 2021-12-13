@@ -16,7 +16,7 @@ import (
 )
 
 type command interface {
-	execute(clientSock *net.UDPConn, UUID uuid.UUID)
+	execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID)
 }
 
 type SleepCommand struct {
@@ -31,18 +31,34 @@ type UnlockCommand struct {
 	server string
 }
 
-func (comm SleepCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
+type SetIdCommand struct {
+	id string
+}
+
+func (comm SleepCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
 	time.Sleep(comm.time)
 }
 
-func (comm LockCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
-	res := paxos.RequestLockServer(clientSock, comm.server, true, UUID)
-	log.Info(fmt.Sprintf("Lock command execution result: %b", res))
+func (comm LockCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+	if *clientID == nil {
+		log.Warn("ClientID is nil, please run setid <yourid>")
+		return
+	}
+	res := paxos.RequestLockServer(clientSock, comm.server, true, **clientID, msgUUID)
+	log.Info(fmt.Sprintf("Lock command execution result: %v", res))
 }
 
-func (comm UnlockCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
-	res := paxos.RequestLockServer(clientSock, comm.server, false, UUID)
-	log.Info(fmt.Sprintf("Unlock command execution result: %b", res))
+func (comm UnlockCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+	if *clientID == nil {
+		log.Warn("ClientID is nil, please run setid <yourid>")
+		return
+	}
+	res := paxos.RequestLockServer(clientSock, comm.server, false, **clientID, msgUUID)
+	log.Info(fmt.Sprintf("Unlock command execution result: %v", res))
+}
+
+func (comm SetIdCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+	*clientID = &comm.id
 }
 
 func parser(line string) (command, error) {
@@ -67,13 +83,14 @@ func parser(line string) (command, error) {
 		return LockCommand{filtered[1]}, nil
 	case filtered[0] == "unlock":
 		return UnlockCommand{filtered[1]}, nil
+	case filtered[0] == "setid":
+		return SetIdCommand{filtered[1]}, nil
 	default:
 		return nil, errors.New("failed to parse command")
 	}
 }
 
 func main() {
-	UUID := uuid.New()
 
 	clientAddr := flag.String("address", "", "Client address")
 	flag.Parse()
@@ -91,13 +108,15 @@ func main() {
 	}
 	log.Info(fmt.Sprintf("Started client on %s", *clientAddr))
 
+	var clientID *string = nil
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		comm, err := parser(scanner.Text())
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			comm.execute(clientSock, UUID)
+			msgUUID := uuid.New()
+			comm.execute(clientSock, &clientID, msgUUID)
 		}
 	}
 }

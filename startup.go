@@ -119,7 +119,7 @@ func LockRelay(state *GlobalState) {
 func (state *GlobalState) PaxosLogProcessor() {
 	for {
 		logEntry := <-state.PaxosNodeState.LogChan
-		log.Info("Commiting log entry: %+v", logEntry)
+		log.Info(fmt.Sprintf("Commiting log entry: %+v", logEntry))
 		CommitLog(state.LockState, state.ClientFacingUDPSock, state.Config.SelfId, []LockRelayMessage{logEntry})
 	}
 }
@@ -154,7 +154,7 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	}
 	state := &GlobalState{config, InitHeartBeatState(config), pc, pcserv, ch,
 		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage),
-		&LockState{}, MakePaxosNodeState(), make(map[*Dispatcher]bool)}
+		&LockState{}, MakePaxosNodeStateFromPersistentFile(config.StateFile), make(map[*Dispatcher]bool)}
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	log.Info("Started message router")

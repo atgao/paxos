@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	mu                sync.Mutex
+	StateFile         string
 	SelfId            int
 	PaxosAddr         string
 	ServerAddr        string
@@ -14,8 +15,9 @@ type Config struct {
 	PeerServerAddress map[int]string
 }
 
-func MkConfig(selfId int, paxosAddr string, serverAddr string, peerAddress map[int]string, peerServerAddress map[int]string) *Config {
+func MkConfig(stateFile string, selfId int, paxosAddr string, serverAddr string, peerAddress map[int]string, peerServerAddress map[int]string) *Config {
 	config := &Config{}
+	config.StateFile = stateFile
 	config.SelfId = selfId
 	config.PaxosAddr = paxosAddr
 	config.ServerAddr = serverAddr
@@ -32,6 +34,7 @@ func ConfigFromJSON(data []byte) *Config {
 	}
 	selfId := int(result["id"].(float64))
 	addresses := result["address"].(map[string]interface{})
+	stateFile := result["state"].(string)
 	paxosAddr := addresses["paxos"].(string)
 	serverAddr := addresses["server"].(string)
 	// var peerAddress map[int]string
@@ -45,7 +48,7 @@ func ConfigFromJSON(data []byte) *Config {
 		peerServerAddress[int(p1["id"].(float64))] = p1addresses["server"].(string)
 	}
 
-	return MkConfig(selfId, paxosAddr, serverAddr, peerAddress, peerServerAddress)
+	return MkConfig(stateFile, selfId, paxosAddr, serverAddr, peerAddress, peerServerAddress)
 }
 
 func (config *Config) AllPeerAddresses() []string {

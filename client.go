@@ -11,8 +11,8 @@ import (
 
 const LockWaitDuration = 10 * time.Second
 
-func RequestLockServer(clientSock *net.UDPConn, server string, lock bool, UUID uuid.UUID) bool {
-	msg := LockMessage{lock, UUID}
+func RequestLockServer(clientSock *net.UDPConn, server string, lock bool, clientID string, msgUUID uuid.UUID) bool {
+	msg := LockMessage{lock, clientID, msgUUID}
 	buffer, err := json.Marshal(msg)
 	if err != nil {
 		log.Fatal("Failed to encode lock message")
