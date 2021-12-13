@@ -26,7 +26,7 @@ func InitHeartBeatState(config *Config) *HeartBeatState {
 	state := &HeartBeatState{}
 	state.lastAliveTime = make(map[int]time.Time)
 	state.alivePeers = make(map[int]bool)
-	for k, _ := range config.PeerAddress {
+	for k := range config.PeerAddress {
 		state.lastAliveTime[k] = time.Unix(0, 0)
 		state.alivePeers[k] = false
 	}

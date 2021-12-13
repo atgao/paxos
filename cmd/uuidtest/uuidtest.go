@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	uuid "github.com/google/uuid"
+	"github.com/google/uuid"
 )
 
 func testv1() {

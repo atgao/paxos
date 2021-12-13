@@ -36,11 +36,13 @@ func (comm SleepCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
 }
 
 func (comm LockCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
-	paxos.RequestLockServer(clientSock, comm.server, true)
+	res := paxos.RequestLockServer(clientSock, comm.server, true, UUID)
+	log.Info(fmt.Sprintf("Lock command execution result: %b", res))
 }
 
 func (comm UnlockCommand) execute(clientSock *net.UDPConn, UUID uuid.UUID) {
-	paxos.RequestLockServer(clientSock, comm.server, false)
+	res := paxos.RequestLockServer(clientSock, comm.server, false, UUID)
+	log.Info(fmt.Sprintf("Unlock command execution result: %b", res))
 }
 
 func parser(line string) (command, error) {

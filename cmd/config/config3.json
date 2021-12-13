@@ -7,15 +7,24 @@
   "peers": [
     {
       "id": 1,
-      "address": "localhost:1025"
+      "address": {
+        "paxos": "localhost:1025",
+        "server": "localhost:1026"
+      }
     },
     {
       "id": 2,
-      "address": "localhost:1027"
+      "address": {
+        "paxos": "localhost:1027",
+        "server": "localhost:1028"
+      }
     },
     {
       "id": 4,
-      "address": "localhost:1031"
+      "address": {
+        "paxos": "localhost:1031",
+        "server": "localhost:1032"
+      }
     }
   ]
 }

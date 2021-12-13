@@ -1,6 +1,7 @@
 package paxos
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"net"
@@ -41,7 +42,7 @@ func DispatchPaxosMessage(state *GlobalState) {
 	for {
 		select {
 		case msg := <-state.PaxosMessageQueue:
-			for dispatcher, _ := range state.PaxosMessageDispatchers {
+			for dispatcher := range state.PaxosMessageDispatchers {
 				if dispatcher.Filter(msg) {
 					dispatcher.ch <- msg
 					break
@@ -85,7 +86,7 @@ func MessageRouter(messageQueue chan GenericMessage, paxosMessageQueue chan Mess
 				log.Debug(fmt.Sprintf("Received keep alive message: %+v", *genericMessage.KeepAlive))
 				keepAliveMessageQueue <- *genericMessage.KeepAlive
 			} else if genericMessage.LockRelay != nil {
-				log.Debug(fmt.Sprintf("Received lock message: %+v", *genericMessage.LockRelay))
+				log.Info(fmt.Sprintf("Received lock message: %+v", *genericMessage.LockRelay))
 				lockRelayMessageQueue <- *genericMessage.LockRelay
 			} else {
 				log.Warn("Unrecognized message")
@@ -99,11 +100,26 @@ func LockRelay(state *GlobalState) {
 		select {
 		case msg := <-state.LockRelayMessageQueue:
 			if state.Config.SelfId == state.HeartBeatState.CurrentLeaderId(state.Config) {
-				log.Warn("Should process lock relay message here")
+				state.ProposerAlgorithm(msg)
 			} else {
-				SendLockRelayMessage(state.InterNodeUDPSock, state.HeartBeatState.CurrentLeaderAddress(state.Config), msg)
+				retryAddr := state.Config.PeerServerAddress[state.HeartBeatState.CurrentLeaderId(state.Config)]
+				m, err := json.Marshal(LockReplyMessage{
+					Success:   false,
+					RetryAddr: &retryAddr,
+				})
+				if err != nil {
+					log.Fatal("Failed to encode the reply message")
+				}
+				sendOneAddr(state.ClientFacingUDPSock, msg.ClientAddr, m)
 			}
 		}
+	}
+}
+
+func (state *GlobalState) PaxosLogProcessor() {
+	for {
+		logEntry := <-state.PaxosNodeState.LogChan
+		log.Info("Commiting log entry: %+v", logEntry)
 	}
 }
 
@@ -141,12 +157,12 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	log.Info("Started message router")
-	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
-	log.Info("Started keep alive worker")
 	go LockRelay(state)
 	log.Info("Started lock relay")
 	go DispatchPaxosMessage(state)
 	log.Info("Started paxos message dispatcher")
+	go state.PaxosLogProcessor()
+	log.Info("Started paxos log processor")
 
 	prepareDispatcher := MakeDispatcher(func(msg Message) bool {
 		return msg.Prepare != nil
@@ -201,5 +217,7 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 		}
 	}()
 
+	go KeepAliveWorker(state.InterNodeUDPSock, state.Config, state.HeartBeatState, state.KeepAliveMessageQueue)
+	log.Info("Started keep alive worker")
 	return state, nil
 }

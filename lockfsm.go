@@ -1,8 +1,6 @@
 package paxos
 
 import (
-	"encoding/json"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"sync"
 )
@@ -11,6 +9,8 @@ type LockState struct {
 	mu         sync.Mutex
 	lockholder *net.UDPAddr
 }
+
+/*
 
 func UDPAddrEq(addr1 net.UDPAddr, addr2 net.UDPAddr) bool {
 	return addr1.String() == addr2.String()
@@ -67,3 +67,5 @@ func CommitLog(lockState *LockState, servConn *net.UDPConn, selfId int, lockLog 
 	lockRes := lockState.transitionLog(lockLog)
 	ResponseLockRelayMessages(servConn, selfId, lockLog, lockRes)
 }
+
+*/

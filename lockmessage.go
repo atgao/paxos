@@ -3,18 +3,25 @@ package paxos
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
 
 type LockMessage struct {
 	Lock bool
+	UUID uuid.UUID
 }
 
 type LockRelayMessage struct {
-	Lock           bool
-	OriginServerId int
-	ClientAddr     *net.UDPAddr
+	Lock       bool
+	ClientAddr *net.UDPAddr
+	UUID       uuid.UUID
+}
+
+type LockReplyMessage struct {
+	Success   bool
+	RetryAddr *string
 }
 
 func UDPServeLockMessage(selfId int, conn *net.UDPConn, ch chan GenericMessage) {
@@ -33,7 +40,7 @@ func UDPServeLockMessage(selfId int, conn *net.UDPConn, ch chan GenericMessage) 
 				log.Warn(string(newbuf))
 				log.Warn(fmt.Sprintf("Error decoding message: " + err.Error()))
 			}
-			ch <- GenericMessage{LockRelay: &LockRelayMessage{msg.Lock, selfId, addr}}
+			ch <- GenericMessage{LockRelay: &LockRelayMessage{msg.Lock, addr, msg.UUID}}
 		}
 	}()
 }

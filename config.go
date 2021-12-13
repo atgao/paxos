@@ -6,19 +6,21 @@ import (
 )
 
 type Config struct {
-	mu          sync.Mutex
-	SelfId      int
-	PaxosAddr   string
-	ServerAddr  string
-	PeerAddress map[int]string
+	mu                sync.Mutex
+	SelfId            int
+	PaxosAddr         string
+	ServerAddr        string
+	PeerAddress       map[int]string
+	PeerServerAddress map[int]string
 }
 
-func MkConfig(selfId int, paxosAddr string, serverAddr string, peerAddress map[int]string) *Config {
+func MkConfig(selfId int, paxosAddr string, serverAddr string, peerAddress map[int]string, peerServerAddress map[int]string) *Config {
 	config := &Config{}
 	config.SelfId = selfId
 	config.PaxosAddr = paxosAddr
 	config.ServerAddr = serverAddr
 	config.PeerAddress = peerAddress
+	config.PeerServerAddress = peerServerAddress
 	return config
 }
 
@@ -35,12 +37,15 @@ func ConfigFromJSON(data []byte) *Config {
 	// var peerAddress map[int]string
 	peers := result["peers"].([]interface{})
 	peerAddress := make(map[int]string)
+	peerServerAddress := make(map[int]string)
 	for _, p := range peers {
 		p1 := p.(map[string]interface{})
-		peerAddress[int(p1["id"].(float64))] = p1["address"].(string)
+		p1addresses := p1["address"].(map[string]interface{})
+		peerAddress[int(p1["id"].(float64))] = p1addresses["paxos"].(string)
+		peerServerAddress[int(p1["id"].(float64))] = p1addresses["server"].(string)
 	}
 
-	return MkConfig(selfId, paxosAddr, serverAddr, peerAddress)
+	return MkConfig(selfId, paxosAddr, serverAddr, peerAddress, peerServerAddress)
 }
 
 func (config *Config) AllPeerAddresses() []string {
