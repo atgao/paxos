@@ -14,9 +14,10 @@ type LockMessage struct {
 }
 
 type LockRelayMessage struct {
-	Lock       bool
-	ClientAddr *net.UDPAddr
-	UUID       uuid.UUID
+	Lock           bool
+	OriginServerId int
+	ClientAddr     *net.UDPAddr
+	UUID           uuid.UUID
 }
 
 type LockReplyMessage struct {
@@ -40,7 +41,7 @@ func UDPServeLockMessage(selfId int, conn *net.UDPConn, ch chan GenericMessage) 
 				log.Warn(string(newbuf))
 				log.Warn(fmt.Sprintf("Error decoding message: " + err.Error()))
 			}
-			ch <- GenericMessage{LockRelay: &LockRelayMessage{msg.Lock, addr, msg.UUID}}
+			ch <- GenericMessage{LockRelay: &LockRelayMessage{msg.Lock, selfId, addr, msg.UUID}}
 		}
 	}()
 }

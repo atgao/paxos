@@ -120,6 +120,7 @@ func (state *GlobalState) PaxosLogProcessor() {
 	for {
 		logEntry := <-state.PaxosNodeState.LogChan
 		log.Info("Commiting log entry: %+v", logEntry)
+		CommitLog(state.LockState, state.ClientFacingUDPSock, state.Config.SelfId, []LockRelayMessage{logEntry})
 	}
 }
 
