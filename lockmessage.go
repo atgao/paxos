@@ -37,7 +37,7 @@ func UDPServeLockMessage(selfId int, conn *net.UDPConn, ch chan GenericMessage) 
 				log.Warn(fmt.Sprintf("Error read from UDP: " + err.Error()))
 				continue
 			}
-			log.Info(fmt.Sprintf("Received %d bytes from %v", n, addr))
+			log.Debug(fmt.Sprintf("Received %d bytes from %v", n, addr))
 			var msg = LockMessage{}
 			if err := json.Unmarshal(newbuf, &msg); err != nil {
 				log.Warn(string(newbuf))
