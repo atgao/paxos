@@ -168,9 +168,15 @@ func GlobalInitialize(configData []byte) (*GlobalState, error) {
 	if err != nil {
 		log.Fatal("Failed to listen on UDP")
 	}
+	paxosNodeState := MakePaxosNodeStateFromPersistentFile(config.StateFile)
+	lockState := LockState{}
+	for i := 0; i != paxosNodeState.AcceptorPersistentState.FirstUnchosenIndex_; i++ {
+		lockState.transition(*paxosNodeState.AcceptorPersistentState.Log[i].AcceptedValue)
+	}
+
 	state := &GlobalState{config, InitHeartBeatState(config), pc, pcserv, ch,
 		make(chan Message), make(chan KeepAliveMessage), make(chan LockRelayMessage),
-		&LockState{}, MakePaxosNodeStateFromPersistentFile(config.StateFile), make(map[*Dispatcher]bool), sync.Mutex{}}
+		&lockState, paxosNodeState, make(map[*Dispatcher]bool), sync.Mutex{}}
 	sendInitialHeartBeat(state)
 	go MessageRouter(state.MessageQueue, state.PaxosMessageQueue, state.KeepAliveMessageQueue, state.LockRelayMessageQueue)
 	log.Info("Started message router")
