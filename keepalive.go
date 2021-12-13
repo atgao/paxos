@@ -48,9 +48,9 @@ func KeepAliveWorker(conn *net.UDPConn, config *Config, state *HeartBeatState, c
 				r2 := state.lastAliveTime[i]
 				r := r1.Sub(r2)
 				if r > 2*KeepAlivePeriod {
+					state.setPeerAliveStatus(i, false)
 					log.Info(fmt.Sprintf("Peer %d dead, current alive peers %v, current leader %d", i,
 						state.AlivePeers(), state.CurrentLeaderId(config)))
-					state.setPeerAliveStatus(i, false)
 				}
 			}
 		case m := <-ch:

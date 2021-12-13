@@ -4,7 +4,7 @@
     "paxos": "localhost:1025",
     "server": "localhost:1026"
   },
-  "state": "./state1.txt",
+  "state": "./state1.json",
   "peers": [
     {
       "id": 2,

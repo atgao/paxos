@@ -150,6 +150,7 @@ type ProposerPersistentState struct {
 }
 
 type ProposerVolatileState struct {
+	mu        sync.Mutex
 	NextIndex int
 	Prepared  bool
 }
@@ -180,13 +181,13 @@ func (state *GlobalState) setChooseProposal(i int, msg LockRelayMessage) {
 	if i > st.AcceptorPersistentState.LastLogIndex {
 		st.AcceptorPersistentState.LastLogIndex = i
 	}
-	state.PaxosNodeState.persistentToFile(state.Config.StateFile)
+	state.PaxosNodeState.persistentToFileNoLock(state.Config.StateFile)
 }
 
 func MakePaxosNodeState() *PaxosNodeState {
 	return &PaxosNodeState{
 		ProposerPersistentState: ProposerPersistentState{MaxRound: 0},
-		ProposerVolatileState:   ProposerVolatileState{0, false},
+		ProposerVolatileState:   ProposerVolatileState{NextIndex: 0, Prepared: false},
 		AcceptorPersistentState: AcceptorPersistentState{
 			LastLogIndex:        -1,
 			MinProposal:         ProposalNumber{},
@@ -202,7 +203,7 @@ type PaxosNodePersistentState struct {
 	Acceptor AcceptorPersistentState
 }
 
-func (st *PaxosNodeState) persistentToFile(filename string) {
+func (st *PaxosNodeState) persistentToFileNoLock(filename string) {
 	data, err := json.Marshal(PaxosNodePersistentState{
 		Proposer: st.ProposerPersistentState,
 		Acceptor: AcceptorPersistentState{
@@ -218,6 +219,11 @@ func (st *PaxosNodeState) persistentToFile(filename string) {
 	if err := os.WriteFile(filename, data, 0644); err != nil {
 		log.Fatal("Failed to persistent PaxosState: " + err.Error())
 	}
+}
+func (st *PaxosNodeState) persistentToFile(filename string) {
+	st.AcceptorPersistentState.mu.Lock()
+	defer st.AcceptorPersistentState.mu.Unlock()
+	st.persistentToFileNoLock(filename)
 }
 
 func MakePaxosNodeStateFromPersistentFile(filename string) *PaxosNodeState {
@@ -240,7 +246,7 @@ func MakePaxosNodeStateFromPersistentFile(filename string) *PaxosNodeState {
 			Log:                 state.Acceptor.Log,
 			FirstUnchosenIndex_: state.Acceptor.FirstUnchosenIndex_,
 		},
-		ProposerVolatileState: ProposerVolatileState{0, false},
+		ProposerVolatileState: ProposerVolatileState{NextIndex: 0, Prepared: false},
 		LogChan:               make(chan LockRelayMessage),
 	}
 }
@@ -365,6 +371,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 		var pn ProposalNumber
 		var Majorityqueue []Message
 
+		state.PaxosNodeState.ProposerVolatileState.mu.Lock()
 		if state.PaxosNodeState.ProposerVolatileState.Prepared == true {
 			index = state.PaxosNodeState.ProposerVolatileState.NextIndex
 			state.PaxosNodeState.ProposerVolatileState.NextIndex += 1
@@ -423,6 +430,7 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 
 			}
 		}
+		state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
 
 		acceptUUID := uuid.New()
 		dispatcher := MakeUUIDDispatcher(acceptUUID)
@@ -454,7 +462,9 @@ func (state *GlobalState) ProposerAlgorithm(inputValue LockRelayMessage) bool {
 				if acceptReply.MinProposal.GE(pn) {
 					state.PaxosNodeState.ProposerPersistentState.MaxRound = acceptReply.MinProposal.N
 					state.PaxosNodeState.persistentToFile(state.Config.StateFile)
+					state.PaxosNodeState.ProposerVolatileState.mu.Lock()
 					state.PaxosNodeState.ProposerVolatileState.Prepared = false
+					state.PaxosNodeState.ProposerVolatileState.mu.Unlock()
 					send = true
 					res = false
 				}

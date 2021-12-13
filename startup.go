@@ -100,8 +100,9 @@ func LockRelay(state *GlobalState) {
 		select {
 		case msg := <-state.LockRelayMessageQueue:
 			if state.Config.SelfId == state.HeartBeatState.CurrentLeaderId(state.Config) {
-				state.ProposerAlgorithm(msg)
+				go state.ProposerAlgorithm(msg)
 			} else {
+				log.Warn("Not leader, asking the client to retry")
 				retryAddr := state.Config.PeerServerAddress[state.HeartBeatState.CurrentLeaderId(state.Config)]
 				m, err := json.Marshal(LockReplyMessage{
 					Success:   false,

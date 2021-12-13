@@ -3,9 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
-	"flag"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"time"
@@ -16,7 +14,7 @@ import (
 )
 
 type command interface {
-	execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID)
+	execute(clientID **string, msgUUID uuid.UUID)
 }
 
 type SleepCommand struct {
@@ -35,29 +33,29 @@ type SetIdCommand struct {
 	id string
 }
 
-func (comm SleepCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+func (comm SleepCommand) execute(clientID **string, msgUUID uuid.UUID) {
 	time.Sleep(comm.time)
 }
 
-func (comm LockCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+func (comm LockCommand) execute(clientID **string, msgUUID uuid.UUID) {
 	if *clientID == nil {
 		log.Warn("ClientID is nil, please run setid <yourid>")
 		return
 	}
-	res := paxos.RequestLockServer(clientSock, comm.server, true, **clientID, msgUUID)
+	res := paxos.RequestLockServer(comm.server, true, **clientID, msgUUID)
 	log.Info(fmt.Sprintf("Lock command execution result: %v", res))
 }
 
-func (comm UnlockCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+func (comm UnlockCommand) execute(clientID **string, msgUUID uuid.UUID) {
 	if *clientID == nil {
 		log.Warn("ClientID is nil, please run setid <yourid>")
 		return
 	}
-	res := paxos.RequestLockServer(clientSock, comm.server, false, **clientID, msgUUID)
+	res := paxos.RequestLockServer(comm.server, false, **clientID, msgUUID)
 	log.Info(fmt.Sprintf("Unlock command execution result: %v", res))
 }
 
-func (comm SetIdCommand) execute(clientSock *net.UDPConn, clientID **string, msgUUID uuid.UUID) {
+func (comm SetIdCommand) execute(clientID **string, msgUUID uuid.UUID) {
 	*clientID = &comm.id
 }
 
@@ -92,21 +90,25 @@ func parser(line string) (command, error) {
 
 func main() {
 
-	clientAddr := flag.String("address", "", "Client address")
-	flag.Parse()
-	if *clientAddr == "" {
-		panic("No client address specified")
-	}
+	/*
+		clientAddr := flag.String("address", "", "Client address")
+		flag.Parse()
+		if *clientAddr == "" {
+			panic("No client address specified")
+		}
+	*/
 
-	addr, err := net.ResolveUDPAddr("udp", *clientAddr)
-	if err != nil {
-		panic("Failed to resolve client address: " + err.Error())
-	}
-	clientSock, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		panic("Failed to open client socket: " + err.Error())
-	}
-	log.Info(fmt.Sprintf("Started client on %s", *clientAddr))
+	/*
+		addr, err := net.ResolveUDPAddr("udp", *clientAddr)
+		if err != nil {
+			panic("Failed to resolve client address: " + err.Error())
+		}
+		clientSock, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			panic("Failed to open client socket: " + err.Error())
+		}
+		log.Info(fmt.Sprintf("Started client on %s", *clientAddr))
+	*/
 
 	var clientID *string = nil
 	scanner := bufio.NewScanner(os.Stdin)
@@ -115,8 +117,12 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			msgUUID := uuid.New()
-			comm.execute(clientSock, &clientID, msgUUID)
+			for i := 0; i != 10; i++ {
+				go func() {
+					msgUUID := uuid.New()
+					comm.execute(&clientID, msgUUID)
+				}()
+			}
 		}
 	}
 }
