@@ -97,7 +97,7 @@ func (lockState *LockState) transition(msg LockRelayMessage) []LockTransitionRes
 					{SUCCESS, msg.ClientAddr},
 					{SUCCESS, lockState.requests[msg.LockId][0].addr},
 				}
-				lockState.requests = lockState.requests[1:]
+				lockState.requests[msg.LockId] = lockState.requests[msg.LockId][1:]
 				return ret
 			}
 		} else {
