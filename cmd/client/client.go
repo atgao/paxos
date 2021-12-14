@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,10 +23,12 @@ type SleepCommand struct {
 }
 
 type LockCommand struct {
+	lockId int
 	server string
 }
 
 type UnlockCommand struct {
+	lockId int
 	server string
 }
 
@@ -42,8 +45,8 @@ func (comm LockCommand) execute(clientID **string, msgUUID uuid.UUID) {
 		log.Warn("ClientID is nil, please run setid <yourid>")
 		return
 	}
-	res := paxos.RequestLockServer(comm.server, true, **clientID, msgUUID)
-	log.Info(fmt.Sprintf("Lock command execution result: %v", res))
+	res := paxos.RequestLockServer(comm.server, true, comm.lockId, **clientID, msgUUID)
+	log.Info(fmt.Sprintf("Lock command execution result: %s", paxos.FormatLockResult(res)))
 }
 
 func (comm UnlockCommand) execute(clientID **string, msgUUID uuid.UUID) {
@@ -51,12 +54,13 @@ func (comm UnlockCommand) execute(clientID **string, msgUUID uuid.UUID) {
 		log.Warn("ClientID is nil, please run setid <yourid>")
 		return
 	}
-	res := paxos.RequestLockServer(comm.server, false, **clientID, msgUUID)
-	log.Info(fmt.Sprintf("Unlock command execution result: %v", res))
+	res := paxos.RequestLockServer(comm.server, false, comm.lockId, **clientID, msgUUID)
+	log.Info(fmt.Sprintf("Unlock command execution result: %v", paxos.FormatLockResult(res)))
 }
 
 func (comm SetIdCommand) execute(clientID **string, msgUUID uuid.UUID) {
 	*clientID = &comm.id
+	log.Info(fmt.Sprintf("Id set to: %s", comm.id))
 }
 
 func parser(line string) (command, error) {
@@ -67,21 +71,38 @@ func parser(line string) (command, error) {
 			filtered = append(filtered, s)
 		}
 	}
-	if len(filtered) != 2 {
-		return nil, errors.New("please enter a command")
-	}
 	switch {
 	case filtered[0] == "sleep":
+		if len(filtered) != 2 {
+			return nil, errors.New("failed to parse sleep command")
+		}
 		s1, err := time.ParseDuration(filtered[1])
 		if err != nil {
 			return nil, errors.New("failed to parse sleep duration")
 		}
 		return SleepCommand{s1}, nil
 	case filtered[0] == "lock":
-		return LockCommand{filtered[1]}, nil
+		if len(filtered) != 3 {
+			return nil, errors.New("failed to parse lock command")
+		}
+		lockId, err := strconv.Atoi(filtered[1])
+		if err != nil {
+			return nil, errors.New("failed to parse lock id")
+		}
+		return LockCommand{lockId, filtered[2]}, nil
 	case filtered[0] == "unlock":
-		return UnlockCommand{filtered[1]}, nil
+		if len(filtered) != 3 {
+			return nil, errors.New("failed to parse unlock command")
+		}
+		lockId, err := strconv.Atoi(filtered[1])
+		if err != nil {
+			return nil, errors.New("failed to parse lock id")
+		}
+		return UnlockCommand{lockId, filtered[2]}, nil
 	case filtered[0] == "setid":
+		if len(filtered) != 2 {
+			return nil, errors.New("failed to parse setid command")
+		}
 		return SetIdCommand{filtered[1]}, nil
 	default:
 		return nil, errors.New("failed to parse command")
@@ -117,12 +138,12 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			for i := 0; i != 10; i++ {
-				go func() {
-					msgUUID := uuid.New()
-					comm.execute(&clientID, msgUUID)
-				}()
-			}
+			//for i := 0; i != 10; i++ {
+			func() {
+				msgUUID := uuid.New()
+				comm.execute(&clientID, msgUUID)
+			}()
+			// }
 		}
 	}
 }
