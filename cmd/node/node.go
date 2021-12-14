@@ -10,7 +10,7 @@ import (
 // var state *paxos.GlobalState
 
 func main() {
-	log.SetReportCaller(true)
+	// log.SetReportCaller(true)
 	configPath := flag.String("config", "", "Config file path")
 	verbose := flag.Int("verbose", 0, "Verbose output")
 	flag.Parse()
