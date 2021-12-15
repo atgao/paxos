@@ -1,4 +1,5 @@
-# paxos
+# Multi-Paxos
+Final Project for UW's CSE 550 Autumn 2021
 
 ## Group members
 Alice Gao - atgao@cs.washington.edu
@@ -51,5 +52,3 @@ If a deadlock is detected, the lock command will return immediately
 with error message: deadlock detected.
 
 The `unlock` command is similar.
-
-
